@@ -17,14 +17,25 @@ Column 51446:
   Counter:  Average MilliSec/Write
   Raw:      \\esx01.example.com\Virtual Disk(EXAMPLE_VM_NAME:scsi3:0)\Average MilliSec/Write
 ```
-4. Extract data pionts of your interest based on column index
+4. Extract time series data from the chosen column
+This will generate a .data file (e.g., esxtop_batch_data_col_51446.data) with timestamped metric values.
 ```sh
  python3  get_value_by_col_index_v2_fs.py  esxtop-batch-data.csv 51446
-echo "tbc"
 ```
- 5. Create chart to display data over time.
+ 5.  Plot the time series data
+Visualize the extracted data using:
 ```sh
 python3  plot_chart_form_data_file.py  esxtop_batch_data_col_51446.data
 ```
 
-   
+
+## Feature Roadmap
+- [x] Parse large CSV files exported by esxtop in batch mode
+- [x] Extract column metadata (host, category, counter)
+- [x] Filter by specific performance metrics (e.g., virtualdisk latency, device latency)
+- [x] Generate time series data from a selected metric
+- [x] Plot data with time on the X-axis and metric values on the Y-axis
+- [ ] Support multiple column extraction and chart overlay
+- [ ] Export charts as PNG/PDF for reporting
+- [ ] Add interactive dashboards using Plotly or Streamlit
+- [ ] Add CLI options for batch processing and automation
