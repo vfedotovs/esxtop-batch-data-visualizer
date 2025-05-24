@@ -27,6 +27,8 @@ Visualize the extracted data using:
 ```sh
 python3  plot_chart_form_data_file.py  esxtop_batch_data_col_51446.data
 ```
+![Exmample of vizualized data](visualisation_example.png)
+
 
 
 ## Feature Roadmap
