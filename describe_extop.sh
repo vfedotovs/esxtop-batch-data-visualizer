@@ -1,4 +1,3 @@
-
 #!/bin/bash
 
 
@@ -8,6 +7,18 @@ input_file="$1"
 # Check if file exists
 if [[ ! -f "$input_file" ]]; then
   echo "Error: esxtop batch capture csv file '$input_file' is required!"
+  exit 1
+fi
+
+# Check if file is empty
+if [[ ! -s "$input_file" ]]; then
+  echo "Error: The file '$input_file' is empty!"
+  exit 1
+fi
+
+# Check if file is readable
+if [[ ! -r "$input_file" ]]; then
+  echo "Error: The file '$input_file' is not readable!"
   exit 1
 fi
 
@@ -65,5 +76,5 @@ head -n 1 "$input_file" | \
    uniq | \
    nl
 
-echo "-- Future extract CPU %RDY for each VM"
+echo "-- CPU %RDY extraction not yet implemented --"
 
