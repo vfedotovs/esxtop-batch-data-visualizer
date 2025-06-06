@@ -29,7 +29,7 @@ with open(data_file, 'r') as f:
         try:
             ts, val = line.strip().split(": ")
             dt = datetime.strptime(ts, "%m/%d/%Y %H:%M:%S")
-            val = float(val) * 1000
+            val = float(val) * 1
             timestamps.append(dt)
             values.append(val)
         except ValueError:
