@@ -46,12 +46,12 @@ try:
 
         # Print first 10 parsed columns
         for i, col in enumerate(parsed_columns):
-            print(f"Column {i + 1}:")
-            print(f"  Host:     {col['host']}")
-            print(f"  Category: {col['category']}")
-            print(f"  Counter:  {col['counter']}")
-            print(f"  Raw:      {col['original']}")
-            print("")
+            print(f"Column {i}: RAW: {col['original']}' ")
+            # print(f"  Host:     {col['host']}")
+            # print(f"  Category: {col['category']}")
+            # print(f"  Counter:  {col['counter']}")
+            # print(f"  Raw:      {col['original']}")
+            # print("")
 
 except FileNotFoundError:
     print(f"Error: File '{filename}' not found.")
