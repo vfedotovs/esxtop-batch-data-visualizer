@@ -76,5 +76,41 @@ head -n 1 "$input_file" | \
    uniq | \
    nl
 
-echo "-- CPU %RDY extraction not yet implemented --"
+
+if [ -f "vdisk_avg_ms_write__all_col_ids" ]; then
+    rm vdisk_avg_ms_write__all_col_ids
+fi
+
+
+echo "Creating file vdisk_avg_ms_write__all_col_ids with indexes and SCSI names..."
+python3 find_column_idx.py "$input_file"| grep -E "\Average MilliSec/Write" > vdisk_avg_ms_write__all_col_ids
+
+
+vdisk_avg_wr_ms_index_count=$(cat vdisk_avg_ms_write__all_col_ids | wc -l)
+echo "Counting SCSI Write indexes..."
+echo "SCSI Write index count: $vdisk_avg_wr_ms_index_count"
+
+
+echo "Extracting data pionts for each SCSI index..."
+
+# Create the array from command output
+vdisk_wr_col_numbers=($(awk '{print $2}' vdisk_avg_ms_write__all_col_ids))
+
+# Iterate over the array
+for num in "${vdisk_wr_col_numbers[@]}"; do
+  echo "Extracting index: $num data points..."
+  python3 get_value_by_col_index_v2_fs.py "$input_file" "$num"
+done
+
+
+echo "Creating vdisk average and max write latency ms table for each vmdk..."
+files=($(ls -l col_*.data | awk '{print $9}'))
+for file in "${files[@]}"; do
+  # awk '{ sum += $3; if ($3 > max) max = $3 } END { print "Average lat ms:", sum/NR; print "Max lat ms:", max }' "$file"
+  awk '{ sum += $3; if ($3 > max) max = $3 } END { printf "File: %s  Average: %.4f  Max: %.4f\n", FILENAME, sum/NR, max }' "$file"
+
+done
+
+
+
 
