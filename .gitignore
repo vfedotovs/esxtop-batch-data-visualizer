@@ -1,0 +1,11 @@
+
+# Ignore all .csv files including hidden ones
+*.csv
+
+
+# Ignore all .png files
+*.png
+
+# Ignore all .data files
+*.data
+
