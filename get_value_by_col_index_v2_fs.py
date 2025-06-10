@@ -11,7 +11,7 @@ if len(sys.argv) < 3:
 
 filename = sys.argv[1]
 column_index = int(sys.argv[2])
-output_file = f"{filename.rsplit('.', 1)[0]}_col_{column_index}.data"
+output_file = f"col_{column_index}.data"
 
 timestamp_pattern = re.compile(r'\d{2}/\d{2}/\d{4} \d{2}:\d{2}:\d{2}')
 time_series = OrderedDict()
