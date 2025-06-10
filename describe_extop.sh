@@ -96,9 +96,16 @@ echo "Extracting data pionts for each SCSI index..."
 # Create the array from command output
 vdisk_wr_col_numbers=($(awk '{print $2}' vdisk_avg_ms_write__all_col_ids))
 
-# Iterate over the array
+total_data_point_files=${#vdisk_wr_col_numbers[@]}
+
+counter=0
+
+#   Iterate over the array
+echo "Started extracting data points based on index list..."
 for num in "${vdisk_wr_col_numbers[@]}"; do
-  echo "Extracting index: $num data points..."
+  ((counter++))
+  progress=$((counter * 100 / total_data_point_files))
+  echo "Creating data files...($progress% complete)"
   python3 get_value_by_col_index_v2_fs.py "$input_file" "$num"
 done
 
