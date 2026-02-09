@@ -142,10 +142,29 @@ echo "Found SCSI Write index count: $vdisk_avg_wr_ms_index_count"
 
 echo "Creating on disk datapiont files for each SCSI index..."
 
-# Create the array from command output
-vdisk_wr_col_numbers=($(awk '{print $2}' vdisk_avg_ms_write__all_col_ids))
+# Create arrays and mapping from column index to vmdk
+declare -A vmdk_by_col
+vdisk_wr_col_numbers=()
+while IFS= read -r line; do
+  col_idx=$(printf '%s\n' "$line" | awk '{print $2}')
+  vmdk_name=$(printf '%s\n' "$line" | sed -n 's/.*Virtual Disk(\(.*\))\\Average.*/\1/p')
+  if [ -n "$col_idx" ]; then
+    vdisk_wr_col_numbers+=("$col_idx")
+    if [ -n "$vmdk_name" ]; then
+      vmdk_by_col["$col_idx"]="$vmdk_name"
+    else
+      vmdk_by_col["$col_idx"]="unknown_vmdk"
+    fi
+  fi
+done < vdisk_avg_ms_write__all_col_ids
+
+echo -e "\n\n-- VMDK list aligned to column indices --"
+for num in "${vdisk_wr_col_numbers[@]}"; do
+  printf "Column %-8s  %s\n" "$num" "${vmdk_by_col[$num]}"
+done
 total_data_point_files=${#vdisk_wr_col_numbers[@]}
 counter=0
+generated_files=()
 
 #   Iterate over the array
 echo "Started extracting data points based on index list..."
@@ -154,17 +173,36 @@ for num in "${vdisk_wr_col_numbers[@]}"; do
   progress=$((counter * 100 / total_data_point_files))
   echo "Creating data files...($progress% complete)"
   python3 get_value_by_col_index_v2_fs.py "$input_file" "$num"
+  generated_files+=("col_${num}.data")
 done
 
 
-echo "Creating vdisk average and max write latency ms table for each vmdk..."
-files=($(ls -l col_*.data | awk '{print $9}'))
-for file in "${files[@]}"; do
-  # awk '{ sum += $3; if ($3 > max) max = $3 } END { print "Average lat ms:", sum/NR; print "Max lat ms:", max }' "$file"
-  awk '{ sum += $3; if ($3 > max) max = $3 } END { printf "File: %s  Average: %.4f  Max: %.4f\n", FILENAME, sum/NR, max }' "$file"
-
+echo "Creating vdisk average and max write latency ms table for each vmdk (sorted by average)..."
+tmp_summary=$(mktemp)
+for file in "${generated_files[@]}"; do
+  col_num=$(printf '%s\n' "$file" | sed -n 's/.*col_\([0-9][0-9]*\)\.data/\1/p')
+  vmdk_name="${vmdk_by_col[$col_num]:-unknown_vmdk}"
+  awk '
+    $3 ~ /^-?[0-9]+(\.[0-9]+)?$/ {
+      sum += $3
+      if (!seen || $3 > max) { max = $3; seen = 1 }
+      n++
+    }
+    END {
+      if (n > 0) {
+        avg = sum/n
+        printf "%.10f\t%.4f\t%.4f\t%s\t%s\n", avg, avg, max, FILENAME, vmdk
+      } else {
+        printf "9999999999\tNaN\tNaN\t%s\t%s\n", FILENAME, vmdk
+      }
+    }
+  ' vmdk="$vmdk_name" "$file" >> "$tmp_summary"
 done
 
-
-
-
+sort -k1,1n "$tmp_summary" | while IFS=$'\t' read -r avg_num avg_disp max_disp file vmdk; do
+  printf "VMDK: %s  File: %s  Average: %s  Max: %s\n" "$vmdk" "$file" "$avg_disp" "$max_disp"
+  if [ "$avg_disp" = "NaN" ]; then
+    printf "Warning: no numeric samples in %s\n" "$file"
+  fi
+done
+rm -f "$tmp_summary"
