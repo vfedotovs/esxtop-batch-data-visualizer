@@ -23,15 +23,14 @@ try:
             for i, cell in enumerate(row):
                 if timestamp_pattern.fullmatch(cell.strip('"')):
                     timestamp = cell.strip('"')
-                    values = row[i + 1:]
-                    time_series[timestamp] = values
+                    time_series[timestamp] = row
                     break
 
     # Write to output file
     with open(output_file, 'w') as out:
-        for timestamp, values in time_series.items():
+        for timestamp, row in time_series.items():
             try:
-                value = float(values[column_index])
+                value = float(row[column_index])
                 out.write(f"{timestamp}: {value}\n")
             except (IndexError, ValueError):
                 out.write(f"{timestamp}: NaN\n")
@@ -44,4 +43,3 @@ except FileNotFoundError:
 except Exception as e:
     print(f"An error occurred: {e}")
     sys.exit(1)
-
