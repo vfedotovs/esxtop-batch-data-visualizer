@@ -25,9 +25,9 @@ with open(data_file, 'r') as f:
             continue
 
 plt.figure(figsize=(12, 6))
-plt.plot(timestamps, values, label='Value × 1000', color='blue')
+plt.plot(timestamps, values, label='Value × 100', color='blue')
 plt.xlabel("Timestamp")
-plt.ylabel("Value × 1000")
+plt.ylabel("Value × 100")
 plt.title(f"Data from {data_file}")
 plt.xticks(rotation=45)
 plt.tight_layout()

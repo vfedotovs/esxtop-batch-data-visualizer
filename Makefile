@@ -4,10 +4,11 @@ CSV_FILE ?= esxtop_batch_data.csv
 COL_ID ?= 51446
 SEARCH_PATTERN ?= scsi.*Write
 DATA_FILE = $(basename $(CSV_FILE))_col_$(COL_ID).data
+SCALE ?= 1.0
 VENV_DIR = .venv
 PYTHON = $(VENV_DIR)/bin/python3
 
-.PHONY: help describe find-column extract plot all clean venv clean-venv
+.PHONY: help describe find-column extract plot plot-save all clean venv clean-venv
 
 # Default target
 help:
@@ -19,7 +20,8 @@ help:
 	@echo "  make find-column CSV_FILE=<file> SEARCH_PATTERN=<pattern>"
 	@echo "                                              - Find column index by pattern"
 	@echo "  make extract CSV_FILE=<file> COL_ID=<id>   - Extract time series data"
-	@echo "  make plot DATA_FILE=<file>                 - Plot time series data"
+	@echo "  make plot DATA_FILE=<file> [SCALE=<n>]     - Plot time series data (interactive)"
+	@echo "  make plot-save DATA_FILE=<file> [SCALE=<n>] - Save chart to PNG file"
 	@echo "  make all CSV_FILE=<file> COL_ID=<id>       - Run extract and plot"
 	@echo "  make clean                                 - Remove generated files"
 	@echo "  make clean-venv                            - Remove virtual environment"
@@ -66,10 +68,15 @@ extract: venv
 	$(PYTHON) get_value_by_col_index_v2_fs.py $(CSV_FILE) $(COL_ID)
 	@echo "Data saved to $(DATA_FILE)"
 
-# Step 5: Plot the time series data
+# Step 5: Plot the time series data (interactive)
 plot: venv
 	@echo "Plotting time series data from $(DATA_FILE)..."
-	$(PYTHON) plot_chart_form_data_file.py $(DATA_FILE)
+	$(PYTHON) visualizer.py $(DATA_FILE) --scale $(SCALE)
+
+# Step 5 (alt): Save chart to PNG file
+plot-save: venv
+	@echo "Saving chart from $(DATA_FILE) to PNG..."
+	$(PYTHON) visualizer.py $(DATA_FILE) --scale $(SCALE) --output esxtop_col_$(COL_ID).png --no-show
 
 # Run extract and plot together
 all: extract plot

@@ -36,9 +36,9 @@ with open(data_file, 'r') as f:
             continue
 
 plt.figure(figsize=(12, 6))
-plt.plot(timestamps, values, label='Value × 1000', color='blue')
+plt.plot(timestamps, values, label='Value', color='blue')
 plt.xlabel("Timestamp")
-plt.ylabel("Value × 1000")
+plt.ylabel("Value")
 plt.title(f"Column {col_index} Data Over Time")
 plt.xticks(rotation=45)
 plt.tight_layout()
