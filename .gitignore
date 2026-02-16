@@ -13,3 +13,18 @@
 vdisk_avg_ms_write__all_col_ids
 *_col_ids
 
+# Python packaging
+*.egg-info/
+dist/
+build/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Virtual environment
+.venv/
+venv/
+env/

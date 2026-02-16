@@ -1,43 +1,150 @@
 # esxtop-batch-data-visualizer
 Visualize performance data from esxtop batch mode CSV exports. This tool extracts, filters, and graphs key VM and host metrics (CPU, disk, memory, etc.) from large esxtop datasets, helping analyze performance trends over time.
 
-## How to use 
-1. Collect esxtop batch data as mentined [here](https://knowledge.broadcom.com/external/article/370279/collecting-esxtop-batch-data-for-esxi-pe.html)
-2. Describe collected batch data from csv file
+## Quick Start
+
+### Using the Makefile (Recommended)
+
 ```sh
-./describe_extop.sh esxtop_batch_data.csv
+# Set up virtual environment (first time only)
+make venv
+
+# Describe the CSV file
+make describe CSV_FILE=esxtop_batch_data.csv
+
+# Find column index
+make find-column CSV_FILE=esxtop_batch_data.csv SEARCH_PATTERN="scsi.*Write"
+
+# Extract and plot data
+make extract CSV_FILE=esxtop_batch_data.csv COL_ID=51446
+make plot DATA_FILE=esxtop_batch_data_col_51446.data SCALE=1.0
+
+# Or save to PNG
+make plot-save CSV_FILE=esxtop_batch_data.csv COL_ID=51446 SCALE=1.0
 ```
-3. Extract data column index id of your interest
+
+### Manual Usage
+
+1. **Collect esxtop batch data** as mentioned [here](https://knowledge.broadcom.com/external/article/370279/collecting-esxtop-batch-data-for-esxi-pe.html)
+
+2. **Describe collected batch data** from CSV file
+   ```sh
+   ./scripts/describe_extop.sh esxtop_batch_data.csv
+   ```
+
+3. **Find column index** of interest
+   ```sh
+   python3 scripts/find_column_idx.py esxtop_batch_data.csv | grep -E -B 4 "scsi.*Write"
+   ```
+   Example output:
+   ```
+   Column 51446 RAW \\esx01.example.com\Virtual Disk(EXAMPLE_VM_NAME:scsi3:0)\Average MilliSec/Write
+   ```
+
+4. **Extract time series data** from the chosen column
+   ```sh
+   python3 scripts/extract_column.py esxtop_batch_data.csv 51446
+   ```
+   This generates `col_51446.data` with timestamped metric values.
+
+5. **Visualize the data**
+   ```sh
+   # Interactive plot
+   python3 scripts/visualize_data.py col_51446.data --scale 1.0
+
+   # Save to PNG
+   python3 scripts/visualize_data.py col_51446.data --scale 1.0 -o output.png --no-show
+   ```
+
+![Example of visualized data](visualisation_example.png)
+
+## Library Usage
+
+The package can also be used as a Python library:
+
+```python
+from esxtop_visualizer import (
+    parse_csv_header,
+    find_columns_by_pattern,
+    extract_and_save,
+    visualize,
+)
+
+# Parse CSV headers
+columns = parse_csv_header("esxtop_batch.csv")
+print(f"Found {len(columns)} columns")
+
+# Find specific columns
+write_latency_cols = find_columns_by_pattern("esxtop_batch.csv", r"scsi.*Write")
+for col in write_latency_cols:
+    print(f"Column {col.index}: {col.counter}")
+
+# Extract time series data
+extract_and_save("esxtop_batch.csv", column_index=51446)
+
+# Visualize
+visualize("col_51446.data", scale=100.0, output_file="chart.png", show=True)
+```
+
+## Project Structure
+
+```
+claude-esxtop/
+├── src/esxtop_visualizer/   # Core library modules
+│   ├── parser.py            # CSV parsing
+│   ├── extractor.py         # Data extraction
+│   └── visualizer.py        # Plotting
+├── scripts/                 # CLI tools
+│   ├── find_column_idx.py
+│   ├── extract_column.py
+│   ├── visualize_data.py
+│   └── describe_extop.sh
+├── tests/                   # Test suite
+├── legacy/                  # Deprecated scripts
+├── Makefile                 # Build automation
+└── pyproject.toml          # Package configuration
+```
+
+## Development
+
+### Running Tests
+
 ```sh
-python3 ./find_column_idx.py  esxtop_batch_data.csv | grep -E -B 4 "scsi.*Write"
-... 
-Column 51446:
-  Host:     esx01.example.com
-  Category: Virtual Disk(EXAMPLE_VM_NAME:scsi3:0)
-  Counter:  Average MilliSec/Write
-  Raw:      \\esx01.example.com\Virtual Disk(EXAMPLE_VM_NAME:scsi3:0)\Average MilliSec/Write
+# Install dev dependencies
+pip install -e ".[dev]"
+
+# Run tests
+pytest tests/ -v
+
+# With coverage
+pytest tests/ --cov=esxtop_visualizer --cov-report=html
 ```
-4. Extract time series data from the chosen column
-This will generate a .data file (e.g., esxtop_batch_data_col_51446.data) with timestamped metric values.
+
+### Installing in Development Mode
+
 ```sh
- python3  get_value_by_col_index_v2_fs.py  esxtop-batch-data.csv 51446
+pip install -e .
 ```
- 5.  Plot the time series data
-Visualize the extracted data using:
-```sh
-python3  plot_chart_form_data_file.py  esxtop_batch_data_col_51446.data
-```
-![Exmample of vizualized data](visualisation_example.png)
+
+This allows you to import the package from anywhere while making live edits.
 
 
 
 ## Feature Roadmap
+
+**Completed:**
 - [x] Parse large CSV files exported by esxtop in batch mode
 - [x] Extract column metadata (host, category, counter)
 - [x] Filter by specific performance metrics (e.g., virtualdisk latency, device latency)
 - [x] Generate time series data from a selected metric
 - [x] Plot data with time on the X-axis and metric values on the Y-axis
+- [x] Export charts as PNG for reporting
+- [x] Module structure for library usage
+- [x] Comprehensive test suite foundation
+- [x] Makefile automation
+
+**Planned:**
 - [ ] Support multiple column extraction and chart overlay
-- [ ] Export charts as PNG/PDF for reporting
+- [ ] Export charts as PDF
 - [ ] Add interactive dashboards using Plotly or Streamlit
-- [ ] Add CLI options for batch processing and automation
+- [ ] Expand test coverage with fixtures

@@ -19,31 +19,42 @@
 
 ## High Priority Issues
 
-### 4. No Shared Library/Module Structure
-Current flat structure:
-```
-├── find_column_idx.py
-├── get_value_by_col_index_v2_fs.py
-├── plot_chart_form_data_file.py
-├── save_chart_from_column_id.py
-└── describe_extop.sh
-```
+### 4. ~~No Shared Library/Module Structure~~ ✅ FIXED
+~~Current flat structure~~ → Refactored into proper Python package structure
 
-Recommended structure:
+**Implemented structure:**
 ```
 ├── src/
-│   ├── __init__.py
-│   ├── parser.py          # CSV parsing logic
-│   ├── extractor.py       # Column data extraction
-│   └── visualizer.py      # Shared plotting (replaces 2 scripts)
+│   └── esxtop_visualizer/
+│       ├── __init__.py      # Public API exports
+│       ├── parser.py        # CSV parsing logic
+│       ├── extractor.py     # Column data extraction
+│       └── visualizer.py    # Plotting utilities
 ├── scripts/
-│   └── describe_extop.sh
+│   ├── find_column_idx.py   # CLI wrapper
+│   ├── extract_column.py    # CLI wrapper
+│   ├── visualize_data.py    # CLI wrapper
+│   └── describe_extop.sh    # Shell script
+├── legacy/
+│   ├── README.md            # Migration guide
+│   ├── plot_chart_form_data_file.py
+│   └── save_chart_from_column_id.py
 ├── tests/
-│   └── test_parser.py
-├── Makefile
+│   ├── test_parser.py
+│   ├── test_extractor.py
+│   └── test_visualizer.py
+├── pyproject.toml           # Package configuration
+├── Makefile                 # Updated paths
 ├── requirements.txt
-└── README.md
+└── README.md                # Updated docs
 ```
+
+**Benefits achieved:**
+- Code can now be imported as a library
+- Proper separation of concerns (library vs CLI)
+- Test structure in place
+- Legacy scripts archived with migration guide
+- Full backward compatibility maintained
 
 ### 5. ~~Hard-coded Magic Numbers~~ ✅ FIXED
 - ~~Scaling factors (100, 1) not parameterized~~ → Now uses `--scale` argument in `visualizer.py`

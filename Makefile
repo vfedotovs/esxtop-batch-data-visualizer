@@ -55,28 +55,28 @@ venv:
 # Step 2: Describe collected batch data from CSV file
 describe:
 	@echo "Describing esxtop batch data from $(CSV_FILE)..."
-	./describe_extop.sh $(CSV_FILE)
+	./scripts/describe_extop.sh $(CSV_FILE)
 
 # Step 3: Extract data column index id of interest
 find-column: venv
 	@echo "Finding column index matching pattern: $(SEARCH_PATTERN)"
-	$(PYTHON) ./find_column_idx.py $(CSV_FILE) | grep -E -B 4 "$(SEARCH_PATTERN)"
+	$(PYTHON) ./scripts/find_column_idx.py $(CSV_FILE) | grep -E -B 4 "$(SEARCH_PATTERN)"
 
 # Step 4: Extract time series data from the chosen column
 extract: venv
 	@echo "Extracting time series data from column $(COL_ID)..."
-	$(PYTHON) get_value_by_col_index_v2_fs.py $(CSV_FILE) $(COL_ID)
+	$(PYTHON) scripts/extract_column.py $(CSV_FILE) $(COL_ID)
 	@echo "Data saved to $(DATA_FILE)"
 
 # Step 5: Plot the time series data (interactive)
 plot: venv
 	@echo "Plotting time series data from $(DATA_FILE)..."
-	$(PYTHON) visualizer.py $(DATA_FILE) --scale $(SCALE)
+	$(PYTHON) scripts/visualize_data.py $(DATA_FILE) --scale $(SCALE)
 
 # Step 5 (alt): Save chart to PNG file
 plot-save: venv
 	@echo "Saving chart from $(DATA_FILE) to PNG..."
-	$(PYTHON) visualizer.py $(DATA_FILE) --scale $(SCALE) --output esxtop_col_$(COL_ID).png --no-show
+	$(PYTHON) scripts/visualize_data.py $(DATA_FILE) --scale $(SCALE) --output esxtop_col_$(COL_ID).png --no-show
 
 # Run extract and plot together
 all: extract plot

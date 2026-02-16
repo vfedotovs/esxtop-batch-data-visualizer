@@ -132,7 +132,7 @@ if [ -f "vdisk_avg_ms_write__all_col_ids" ]; then
 fi
 
 
-python3 find_column_idx.py "$input_file"| grep -E "\Average MilliSec/Write" > vdisk_avg_ms_write__all_col_ids
+python3 scripts/find_column_idx.py "$input_file"| grep -E "\Average MilliSec/Write" > vdisk_avg_ms_write__all_col_ids
 
 
 vdisk_avg_wr_ms_index_count=$(cat vdisk_avg_ms_write__all_col_ids | wc -l)
@@ -172,7 +172,7 @@ for num in "${vdisk_wr_col_numbers[@]}"; do
   ((counter++))
   progress=$((counter * 100 / total_data_point_files))
   echo "Creating data files...($progress% complete)"
-  python3 get_value_by_col_index_v2_fs.py "$input_file" "$num"
+  python3 scripts/extract_column.py "$input_file" "$num"
   generated_files+=("col_${num}.data")
 done
 
