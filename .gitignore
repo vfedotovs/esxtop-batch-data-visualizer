@@ -9,6 +9,9 @@
 # Ignore all .data files
 *.data
 
+# Ignore all .meta files
+*.meta
+
 # Ignore generated column metadata files
 vdisk_avg_ms_write__all_col_ids
 *_col_ids
