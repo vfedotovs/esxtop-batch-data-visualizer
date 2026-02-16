@@ -99,7 +99,6 @@ Examples:
 
         # Print or save summary
         if args.save:
-            import sys
             original_stdout = sys.stdout
             with open(args.save, 'w') as f:
                 sys.stdout = f
