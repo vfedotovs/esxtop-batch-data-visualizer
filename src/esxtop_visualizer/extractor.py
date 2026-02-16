@@ -120,19 +120,43 @@ def save_time_series(time_series: TimeSeriesData, output_file: str) -> None:
                 out.write(f"{timestamp}: NaN\n")
 
 
+def save_metadata(column_title: str, output_file: str) -> None:
+    """Save column metadata to companion .meta file.
+
+    Creates a .meta file alongside the .data file with the human-friendly title.
+
+    Args:
+        column_title: Human-friendly column title
+        output_file: Path to the .data file (will create .meta with same base name)
+
+    Example:
+        >>> save_metadata("VM:scsi0:2 - Average Write Latency", "col_100.data")
+        # Creates col_100.meta with the title
+    """
+    import os
+    base = os.path.splitext(output_file)[0]
+    meta_file = f"{base}.meta"
+
+    with open(meta_file, 'w') as f:
+        f.write(column_title)
+
+
 def extract_and_save(
     filename: str,
     column_index: int,
-    output_file: Optional[str] = None
+    output_file: Optional[str] = None,
+    column_title: Optional[str] = None
 ) -> str:
     """Extract column data and save to file in one operation.
 
     This is a convenience function that combines extraction and saving.
+    Optionally saves metadata for better chart titles.
 
     Args:
         filename: Path to CSV file
         column_index: Column index to extract
         output_file: Optional output filename (defaults to col_{index}.data)
+        column_title: Optional human-friendly title (saved to .meta file)
 
     Returns:
         Path to the created output file
@@ -142,7 +166,8 @@ def extract_and_save(
         ValueError: If CSV cannot be parsed
 
     Example:
-        >>> output = extract_and_save("esxtop_batch.csv", 100)
+        >>> output = extract_and_save("esxtop_batch.csv", 100,
+        ...                           column_title="VM:scsi0:2 - Write Latency")
         >>> print(f"Saved to {output}")
         Saved to col_100.data
     """
@@ -151,6 +176,10 @@ def extract_and_save(
 
     time_series = extract_column_data(filename, column_index)
     save_time_series(time_series, output_file)
+
+    # Save metadata if title provided
+    if column_title:
+        save_metadata(column_title, output_file)
 
     return output_file
 
@@ -217,7 +246,8 @@ def extract_multiple_columns(
 def extract_and_save_batch(
     filename: str,
     column_indices: List[int],
-    output_dir: str = "."
+    output_dir: str = ".",
+    column_titles: Optional[Dict[int, str]] = None
 ) -> List[str]:
     """Extract multiple columns and save each to a separate .data file.
 
@@ -229,6 +259,7 @@ def extract_and_save_batch(
         filename: Path to CSV file
         column_indices: List of column indices to extract
         output_dir: Directory to save output files (default: current directory)
+        column_titles: Optional dict mapping column index to human-friendly title
 
     Returns:
         List of created output file paths
@@ -238,9 +269,10 @@ def extract_and_save_batch(
         ValueError: If CSV cannot be parsed
 
     Example:
-        >>> files = extract_and_save_batch("esxtop_batch.csv", [100, 200, 300])
+        >>> titles = {100: "VM1 - Write Latency", 200: "VM2 - Write Latency"}
+        >>> files = extract_and_save_batch("esxtop_batch.csv", [100, 200], column_titles=titles)
         >>> print(f"Created {len(files)} files: {files}")
-        Created 3 files: ['col_100.data', 'col_200.data', 'col_300.data']
+        Created 2 files: ['col_100.data', 'col_200.data']
     """
     import os
 
@@ -253,5 +285,9 @@ def extract_and_save_batch(
         output_file = os.path.join(output_dir, f"col_{col_idx}.data")
         save_time_series(time_series, output_file)
         output_files.append(output_file)
+
+        # Save metadata if title provided
+        if column_titles and col_idx in column_titles:
+            save_metadata(column_titles[col_idx], output_file)
 
     return output_files

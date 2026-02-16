@@ -19,6 +19,7 @@ src_path = Path(__file__).parent.parent / "src"
 sys.path.insert(0, str(src_path))
 
 from esxtop_visualizer.extractor import extract_and_save_batch
+from esxtop_visualizer.parser import parse_csv_header
 
 
 def main():
@@ -27,6 +28,7 @@ def main():
         print()
         print("Extract multiple columns from CSV in a single pass.")
         print("Much more efficient than extracting columns individually.")
+        print("Also saves human-friendly titles to .meta files for better charts.")
         print()
         print("Example:")
         print("  ./scripts/extract_columns_batch.py esxtop.csv 100 200 300")
@@ -47,11 +49,25 @@ def main():
 
     try:
         print(f"Extracting {len(column_indices)} columns from {filename}...")
-        output_files = extract_and_save_batch(filename, column_indices)
+
+        # Parse CSV header to get friendly names
+        print("Reading column metadata...")
+        columns = parse_csv_header(filename)
+        column_map = {col.index: col for col in columns}
+
+        # Build title mapping
+        column_titles = {}
+        for idx in column_indices:
+            if idx in column_map:
+                column_titles[idx] = column_map[idx].get_friendly_name()
+
+        # Extract with metadata
+        output_files = extract_and_save_batch(filename, column_indices, column_titles=column_titles)
 
         print(f"Successfully extracted {len(output_files)} columns:")
-        for output_file in output_files:
-            print(f"  - {output_file}")
+        for idx, output_file in zip(column_indices, output_files):
+            title = column_titles.get(idx, "Unknown")
+            print(f"  - {output_file} ({title})")
 
     except FileNotFoundError:
         print(f"Error: File '{filename}' not found.")

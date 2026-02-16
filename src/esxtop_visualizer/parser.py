@@ -42,6 +42,34 @@ class ColumnMetadata:
         """
         return bool(re.search(pattern, self.original, re.IGNORECASE))
 
+    def get_friendly_name(self) -> str:
+        """Generate a human-friendly name for this column.
+
+        Extracts the most relevant parts (VM name, disk, counter) for display.
+
+        Returns:
+            Friendly name suitable for chart titles
+
+        Example:
+            >>> col = ColumnMetadata(...)  # Virtual Disk(SRVBKPORA1VDF:scsi0:2)\Average MilliSec/Write
+            >>> col.get_friendly_name()
+            'SRVBKPORA1VDF:scsi0:2 - Average MilliSec/Write'
+        """
+        # Try to extract VMDK name from Virtual Disk category
+        if "Virtual Disk" in self.category:
+            # Extract VM:disk from "Virtual Disk(VM:scsi0:2)"
+            match = re.search(r'Virtual Disk\(([^)]+)\)', self.category)
+            if match:
+                vmdk = match.group(1)
+                return f"{vmdk} - {self.counter}"
+
+        # Fallback: use category and counter
+        if self.counter:
+            return f"{self.category} - {self.counter}"
+
+        # Last resort: use original
+        return self.original
+
 
 def parse_csv_header(filename: str) -> List[ColumnMetadata]:
     """Parse PDH-CSV header and extract column metadata.

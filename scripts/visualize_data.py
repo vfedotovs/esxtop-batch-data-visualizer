@@ -38,12 +38,16 @@ def main():
         action="store_true",
         help="Don't display the chart (use with --output)"
     )
+    parser.add_argument(
+        "-t", "--title",
+        help="Custom chart title (overrides auto-detected title from .meta file)"
+    )
 
     args = parser.parse_args()
 
     try:
         show = not args.no_show
-        visualize(args.data_file, args.scale, args.output, show)
+        visualize(args.data_file, args.scale, args.output, show, args.title)
 
     except FileNotFoundError:
         print(f"Error: File '{args.data_file}' not found.", file=sys.stderr)

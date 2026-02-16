@@ -60,24 +60,64 @@ def load_data_file(data_file: str, scale: float = 1.0) -> Tuple[List[datetime], 
         raise FileNotFoundError(f"Data file '{data_file}' not found")
 
 
-def generate_title(data_file: str) -> str:
-    """Generate chart title from filename.
+def load_metadata(data_file: str) -> Optional[str]:
+    """Load metadata title from companion .meta file if it exists.
 
-    Extracts column number from filename pattern "col_NNN.data".
+    Args:
+        data_file: Path to .data file
+
+    Returns:
+        Title from .meta file, or None if file doesn't exist
+
+    Example:
+        >>> title = load_metadata("col_123.data")
+        >>> print(title)
+        'VM:scsi0:2 - Average MilliSec/Write'
+    """
+    import os
+    base = os.path.splitext(data_file)[0]
+    meta_file = f"{base}.meta"
+
+    try:
+        with open(meta_file, 'r') as f:
+            return f.read().strip()
+    except FileNotFoundError:
+        return None
+
+
+def generate_title(data_file: str, custom_title: Optional[str] = None) -> str:
+    """Generate chart title from metadata or filename.
+
+    Priority: custom_title > .meta file > filename pattern
 
     Args:
         data_file: Input filename
+        custom_title: Optional custom title to override everything
 
     Returns:
         Chart title string
 
     Example:
         >>> generate_title("col_123.data")
-        'Column 123 Data Over Time'
+        'VM:scsi0:2 - Average MilliSec/Write'  # From .meta file if exists
+        >>> generate_title("col_123.data", "My Custom Title")
+        'My Custom Title'
     """
+    # Priority 1: Custom title
+    if custom_title:
+        return custom_title
+
+    # Priority 2: Metadata file
+    metadata_title = load_metadata(data_file)
+    if metadata_title:
+        return metadata_title
+
+    # Priority 3: Extract from filename
     match = re.search(r'col_(\d+)', data_file)
     if match:
         return f"Column {match.group(1)} Data Over Time"
+
+    # Fallback: Use filename
     return f"Data from {data_file}"
 
 
@@ -164,17 +204,20 @@ def visualize(
     data_file: str,
     scale: float = 1.0,
     output_file: Optional[str] = None,
-    show: bool = True
+    show: bool = True,
+    title: Optional[str] = None
 ) -> None:
     """High-level function to load and visualize a data file.
 
     This is a convenience function that combines data loading and plotting.
+    Automatically uses friendly titles from .meta files if available.
 
     Args:
         data_file: Path to .data file
         scale: Scaling factor for values (default: 1.0)
         output_file: Optional PNG output file path
         show: Whether to display interactive plot (default: True)
+        title: Optional custom title (overrides .meta file and filename)
 
     Raises:
         FileNotFoundError: If data file doesn't exist
@@ -183,7 +226,9 @@ def visualize(
     Example:
         >>> visualize("col_100.data", scale=100.0, output_file="chart.png", show=False)
         Chart saved as chart.png
+        >>> visualize("col_100.data", title="My Custom Title")
+        # Uses custom title
     """
     timestamps, values = load_data_file(data_file, scale)
-    title = generate_title(data_file)
-    plot_time_series(timestamps, values, title, scale, output_file, show)
+    chart_title = generate_title(data_file, title)
+    plot_time_series(timestamps, values, chart_title, scale, output_file, show)
