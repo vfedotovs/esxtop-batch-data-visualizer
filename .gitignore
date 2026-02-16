@@ -14,6 +14,9 @@
 
 # Ignore generated column metadata files
 vdisk_avg_ms_write__all_col_ids
+vdisk_avg_ms_read__all_col_ids
+pdisk_avg_driver_ms_read__all_col_ids
+pdisk_avg_driver_ms_write__all_col_ids
 *_col_ids
 
 # Python packaging

@@ -8,7 +8,7 @@ SCALE ?= 1.0
 VENV_DIR = .venv
 PYTHON = $(VENV_DIR)/bin/python3
 
-.PHONY: help describe summarize find-column extract plot plot-save all clean venv clean-venv
+.PHONY: help describe describe-pdisk summarize find-column extract plot plot-save all clean venv clean-venv
 
 # Default target
 help:
@@ -17,6 +17,7 @@ help:
 	@echo "Usage:"
 	@echo "  make venv                                   - Set up Python virtual environment"
 	@echo "  make describe CSV_FILE=<file>              - Describe esxtop CSV file"
+	@echo "  make describe-pdisk CSV_FILE=<file>        - Analyze Physical Disk SCSI Devices (naa.*)"
 	@echo "  make summarize CSV_FILE=<file>             - Summarize categories and counters"
 	@echo "  make find-column CSV_FILE=<file> SEARCH_PATTERN=<pattern>"
 	@echo "                                              - Find column index by pattern"
@@ -57,6 +58,11 @@ venv:
 describe:
 	@echo "Describing esxtop batch data from $(CSV_FILE)..."
 	./scripts/describe_extop.sh $(CSV_FILE)
+
+# Analyze Physical Disk SCSI Devices (naa.*)
+describe-pdisk: venv
+	@echo "Analyzing Physical Disk SCSI Devices from $(CSV_FILE)..."
+	./scripts/describe_physical_disk.sh $(CSV_FILE)
 
 # Summarize categories and counters
 summarize: venv
