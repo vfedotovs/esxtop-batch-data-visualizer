@@ -60,7 +60,7 @@ describe:
 # Step 3: Extract data column index id of interest
 find-column: venv
 	@echo "Finding column index matching pattern: $(SEARCH_PATTERN)"
-	$(PYTHON) ./scripts/find_column_idx.py $(CSV_FILE) | grep -E -B 4 "$(SEARCH_PATTERN)"
+	$(PYTHON) ./scripts/find_column_idx.py $(CSV_FILE) --limit 10 | grep -E -B 4 "$(SEARCH_PATTERN)"
 
 # Step 4: Extract time series data from the chosen column
 extract: venv
