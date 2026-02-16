@@ -10,8 +10,6 @@ import sys
 from datetime import datetime
 from typing import List, Tuple, Optional
 
-import matplotlib.pyplot as plt
-
 
 def load_data_file(data_file: str, scale: float = 1.0) -> Tuple[List[datetime], List[float]]:
     """Load and parse time series data from .data file.
@@ -122,11 +120,21 @@ def plot_time_series(
 
     Raises:
         ValueError: If no data to plot
+        ImportError: If matplotlib is not installed
 
     Example:
         >>> timestamps, values = load_data_file("col_100.data")
         >>> plot_time_series(timestamps, values, "My Chart", output_file="chart.png")
     """
+    # Lazy import matplotlib only when plotting is needed
+    try:
+        import matplotlib.pyplot as plt
+    except ImportError:
+        raise ImportError(
+            "matplotlib is required for plotting. "
+            "Install it with: pip install matplotlib>=3.7.0"
+        )
+
     if not timestamps:
         raise ValueError("No data to plot")
 
