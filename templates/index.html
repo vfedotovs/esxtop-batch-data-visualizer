@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>esxtop Batch Data Analyzer</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+            color: #333;
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .upload-area {
+            border: 3px dashed #3498db;
+            border-radius: 8px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: #f8f9fa;
+        }
+        .upload-area:hover, .upload-area.dragover {
+            background: #e3f2fd;
+            border-color: #2196f3;
+        }
+        .upload-area.has-file {
+            background: #e8f5e9;
+            border-color: #4caf50;
+        }
+        .upload-icon {
+            font-size: 48px;
+            margin-bottom: 10px;
+        }
+        input[type="file"] {
+            display: none;
+        }
+        .file-name {
+            margin-top: 10px;
+            font-weight: bold;
+            color: #4caf50;
+        }
+        .options {
+            margin: 20px 0;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+        .options label {
+            display: block;
+            margin: 10px 0;
+            cursor: pointer;
+        }
+        .options input[type="radio"] {
+            margin-right: 10px;
+        }
+        button {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        button:hover {
+            background: #2980b9;
+        }
+        button:disabled {
+            background: #bdc3c7;
+            cursor: not-allowed;
+        }
+        .results {
+            display: none;
+        }
+        .results.visible {
+            display: block;
+        }
+        .output {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 20px;
+            border-radius: 8px;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 13px;
+            line-height: 1.5;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            max-height: 600px;
+            overflow-y: auto;
+        }
+        .files-list {
+            margin-top: 20px;
+        }
+        .files-list h3 {
+            margin-bottom: 10px;
+        }
+        .files-list a {
+            display: inline-block;
+            margin: 5px 10px 5px 0;
+            padding: 8px 15px;
+            background: #27ae60;
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .files-list a:hover {
+            background: #219a52;
+        }
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 40px;
+        }
+        .loading.visible {
+            display: block;
+        }
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .error {
+            background: #ffebee;
+            color: #c62828;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 10px;
+        }
+        .success-badge {
+            background: #4caf50;
+            color: white;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 14px;
+            margin-left: 10px;
+        }
+        .error-badge {
+            background: #f44336;
+            color: white;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 14px;
+            margin-left: 10px;
+        }
+        footer {
+            text-align: center;
+            color: #7f8c8d;
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #ddd;
+        }
+    </style>
+</head>
+<body>
+    <h1>esxtop Batch Data Analyzer</h1>
+
+    <div class="container">
+        <div class="upload-area" id="uploadArea">
+            <div class="upload-icon">📁</div>
+            <p>Drag & drop your esxtop CSV file here</p>
+            <p>or click to select file</p>
+            <input type="file" id="fileInput" accept=".csv">
+            <div class="file-name" id="fileName"></div>
+        </div>
+
+        <div class="options">
+            <h3>Analysis Type:</h3>
+            <label>
+                <input type="radio" name="analysis" value="both" checked>
+                <strong>Both</strong> - VMDK and Physical Disk analysis
+            </label>
+            <label>
+                <input type="radio" name="analysis" value="describe">
+                <strong>VMDK Only</strong> - Virtual Disk latency (Average MilliSec/Read & Write)
+            </label>
+            <label>
+                <input type="radio" name="analysis" value="describe-pdisk">
+                <strong>Physical Disk Only</strong> - Physical Disk SCSI Device latency (naa.*)
+            </label>
+        </div>
+
+        <button id="analyzeBtn" disabled>Analyze</button>
+    </div>
+
+    <div class="loading" id="loading">
+        <div class="spinner"></div>
+        <p>Analyzing esxtop data... This may take a few minutes for large files.</p>
+    </div>
+
+    <div class="results container" id="results">
+        <h2>Analysis Results <span id="statusBadge"></span></h2>
+        <div class="files-list" id="filesList"></div>
+        <h3>Output:</h3>
+        <div class="output" id="output"></div>
+        <div class="error" id="errorDiv" style="display: none;"></div>
+    </div>
+
+    <footer>
+        <p>esxtop Batch Data Visualizer v1.0.0</p>
+    </footer>
+
+    <script>
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const fileName = document.getElementById('fileName');
+        const analyzeBtn = document.getElementById('analyzeBtn');
+        const loading = document.getElementById('loading');
+        const results = document.getElementById('results');
+        const output = document.getElementById('output');
+        const filesList = document.getElementById('filesList');
+        const statusBadge = document.getElementById('statusBadge');
+        const errorDiv = document.getElementById('errorDiv');
+
+        let selectedFile = null;
+
+        // Click to upload
+        uploadArea.addEventListener('click', () => fileInput.click());
+
+        // Drag and drop
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFile(files[0]);
+            }
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFile(e.target.files[0]);
+            }
+        });
+
+        function handleFile(file) {
+            if (!file.name.endsWith('.csv')) {
+                alert('Please select a CSV file');
+                return;
+            }
+            selectedFile = file;
+            fileName.textContent = `Selected: ${file.name} (${formatSize(file.size)})`;
+            uploadArea.classList.add('has-file');
+            analyzeBtn.disabled = false;
+        }
+
+        function formatSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        }
+
+        analyzeBtn.addEventListener('click', async () => {
+            if (!selectedFile) return;
+
+            const analysisType = document.querySelector('input[name="analysis"]:checked').value;
+
+            // Show loading
+            loading.classList.add('visible');
+            results.classList.remove('visible');
+            analyzeBtn.disabled = true;
+
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+            formData.append('analysis_type', analysisType);
+
+            try {
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                loading.classList.remove('visible');
+                results.classList.add('visible');
+
+                if (data.error) {
+                    statusBadge.innerHTML = '<span class="error-badge">Error</span>';
+                    errorDiv.style.display = 'block';
+                    errorDiv.textContent = data.error;
+                    output.textContent = '';
+                } else {
+                    if (data.success) {
+                        statusBadge.innerHTML = '<span class="success-badge">Success</span>';
+                        errorDiv.style.display = 'none';
+                    } else {
+                        statusBadge.innerHTML = '<span class="error-badge">Completed with errors</span>';
+                        if (data.errors && data.errors.length > 0) {
+                            errorDiv.style.display = 'block';
+                            errorDiv.textContent = data.errors.join('\n');
+                        }
+                    }
+
+                    output.textContent = data.output || 'No output generated';
+
+                    // Show downloadable files
+                    if (data.files && data.files.length > 0) {
+                        let filesHtml = '<h3>Generated Files:</h3>';
+                        data.files.forEach(file => {
+                            filesHtml += `<a href="/download/${data.output_dir}/${file}" target="_blank">${file}</a>`;
+                        });
+                        filesList.innerHTML = filesHtml;
+                    } else {
+                        filesList.innerHTML = '';
+                    }
+                }
+            } catch (err) {
+                loading.classList.remove('visible');
+                results.classList.add('visible');
+                statusBadge.innerHTML = '<span class="error-badge">Error</span>';
+                errorDiv.style.display = 'block';
+                errorDiv.textContent = 'Failed to connect to server: ' + err.message;
+            }
+
+            analyzeBtn.disabled = false;
+        });
+    </script>
+</body>
+</html>

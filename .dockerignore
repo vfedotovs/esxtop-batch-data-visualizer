@@ -1,0 +1,47 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+.coverage
+htmlcov
+*.egg-info
+dist
+build
+
+# Virtual environments
+.venv
+venv
+env
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# Data files (should be uploaded via web interface)
+*.csv
+*.data
+*.png
+*_col_ids
+
+# Meta files
+*.meta
+
+# Legacy
+legacy/
+
+# Documentation
+*.md
+!templates/*.html
+
+# Tests
+tests/
+
+# Local config
+.claude/

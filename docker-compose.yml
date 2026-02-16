@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  esxtop-analyzer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: esxtop-analyzer
+    ports:
+      - "5000:5000"
+    volumes:
+      # Optional: mount a local directory for persistent output
+      - esxtop_output:/tmp/esxtop_output
+    environment:
+      - FLASK_ENV=production
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  esxtop_output:
+    driver: local

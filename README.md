@@ -23,6 +23,42 @@ make plot DATA_FILE=esxtop_batch_data_col_51446.data SCALE=1.0
 make plot-save CSV_FILE=esxtop_batch_data.csv COL_ID=51446 SCALE=1.0
 ```
 
+### Using Docker (Web Interface)
+
+The easiest way to use this tool is via the Docker web interface:
+
+```sh
+# Using docker-compose (recommended)
+docker-compose up -d
+
+# Or build and run manually
+docker build -t esxtop-analyzer .
+docker run -p 5000:5000 esxtop-analyzer
+```
+
+Then open http://localhost:5000 in your browser.
+
+**Web Interface Features:**
+- Drag-and-drop CSV file upload (up to 500MB)
+- Select analysis type: VMDK only, Physical Disk only, or Both
+- View results directly in browser
+- Download generated data files
+
+**Docker Commands:**
+```sh
+# Start the container
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Stop the container
+docker-compose down
+
+# Rebuild after changes
+docker-compose up -d --build
+```
+
 ### Manual Usage
 
 1. **Collect esxtop batch data** as mentioned [here](https://knowledge.broadcom.com/external/article/370279/collecting-esxtop-batch-data-for-esxi-pe.html)
@@ -89,7 +125,7 @@ visualize("col_51446.data", scale=100.0, output_file="chart.png", show=True)
 ## Project Structure
 
 ```
-claude-esxtop/
+esxtop-batch-data-visualizer/
 ├── src/esxtop_visualizer/   # Core library modules
 │   ├── parser.py            # CSV parsing
 │   ├── extractor.py         # Data extraction
@@ -98,11 +134,16 @@ claude-esxtop/
 │   ├── find_column_idx.py
 │   ├── extract_column.py
 │   ├── visualize_data.py
-│   └── describe_extop.sh
+│   ├── describe_extop.sh
+│   └── describe_physical_disk.sh
+├── templates/               # Web UI templates
+│   └── index.html
 ├── tests/                   # Test suite
-├── legacy/                  # Deprecated scripts
+├── app.py                   # Flask web application
+├── Dockerfile               # Docker build configuration
+├── docker-compose.yml       # Docker Compose configuration
 ├── Makefile                 # Build automation
-└── pyproject.toml          # Package configuration
+└── pyproject.toml           # Package configuration
 ```
 
 ## Development
@@ -142,9 +183,11 @@ This allows you to import the package from anywhere while making live edits.
 - [x] Module structure for library usage
 - [x] Comprehensive test suite foundation
 - [x] Makefile automation
+- [x] Docker containerization with web interface
+- [x] Physical Disk SCSI Device analysis (naa.*)
+- [x] VMDK Read/Write latency summary tables
 
 **Planned:**
 - [ ] Support multiple column extraction and chart overlay
 - [ ] Export charts as PDF
-- [ ] Add interactive dashboards using Plotly or Streamlit
 - [ ] Expand test coverage with fixtures
