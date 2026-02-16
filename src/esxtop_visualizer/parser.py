@@ -8,7 +8,8 @@ headers from VMware ESXi esxtop batch mode exports.
 import csv
 import re
 from dataclasses import dataclass
-from typing import List
+from typing import List, Dict, Tuple
+from collections import Counter
 
 
 @dataclass
@@ -167,3 +168,100 @@ def print_column_info(column: ColumnMetadata, verbose: bool = False) -> None:
         print()
     else:
         print(f"Column {column.index} RAW {column.original}' ")
+
+
+def summarize_columns(
+    filename: str,
+    category_pattern: str = None,
+    counter_pattern: str = None
+) -> Tuple[Dict[str, int], Dict[str, int], Dict[Tuple[str, str], int]]:
+    """Summarize categories and counters in CSV file with counts.
+
+    Args:
+        filename: Path to CSV file
+        category_pattern: Optional regex to filter categories
+        counter_pattern: Optional regex to filter counters
+
+    Returns:
+        Tuple of (category_counts, counter_counts, combined_counts)
+        - category_counts: Dict mapping category to count
+        - counter_counts: Dict mapping counter to count
+        - combined_counts: Dict mapping (category, counter) tuple to count
+
+    Example:
+        >>> cats, counters, combined = summarize_columns("esxtop.csv")
+        >>> print(f"Virtual Disk columns: {cats.get('Virtual Disk', 0)}")
+        >>> print(f"Write latency metrics: {counters.get('Average MilliSec/Write', 0)}")
+    """
+    columns = parse_csv_header(filename)
+
+    # Apply filters if provided
+    if category_pattern or counter_pattern:
+        filtered_columns = []
+        for col in columns:
+            if category_pattern and not re.search(category_pattern, col.category, re.IGNORECASE):
+                continue
+            if counter_pattern and not re.search(counter_pattern, col.counter, re.IGNORECASE):
+                continue
+            filtered_columns.append(col)
+        columns = filtered_columns
+
+    # Count occurrences
+    categories = Counter(col.category for col in columns if col.category)
+    counters = Counter(col.counter for col in columns if col.counter)
+    combined = Counter((col.category, col.counter) for col in columns if col.category and col.counter)
+
+    return dict(categories), dict(counters), dict(combined)
+
+
+def print_summary(
+    category_counts: Dict[str, int],
+    counter_counts: Dict[str, int],
+    combined_counts: Dict[Tuple[str, str], int],
+    top_n: int = 20
+) -> None:
+    """Print formatted summary of categories and counters.
+
+    Args:
+        category_counts: Dictionary of category to count
+        counter_counts: Dictionary of counter to count
+        combined_counts: Dictionary of (category, counter) tuple to count
+        top_n: Number of top items to display (default: 20)
+    """
+    print("=" * 80)
+    print(f"COLUMN SUMMARY - Top {top_n} Categories and Counters")
+    print("=" * 80)
+
+    # Print top categories
+    print(f"\n📁 TOP {top_n} CATEGORIES:")
+    print("-" * 80)
+    sorted_categories = sorted(category_counts.items(), key=lambda x: x[1], reverse=True)
+    for i, (category, count) in enumerate(sorted_categories[:top_n], 1):
+        print(f"{i:3}. {category:50} [{count:4} columns]")
+
+    # Print top counters
+    print(f"\n📊 TOP {top_n} COUNTERS:")
+    print("-" * 80)
+    sorted_counters = sorted(counter_counts.items(), key=lambda x: x[1], reverse=True)
+    for i, (counter, count) in enumerate(sorted_counters[:top_n], 1):
+        print(f"{i:3}. {counter:50} [{count:4} columns]")
+
+    # Print top combinations
+    print(f"\n🔗 TOP {top_n} CATEGORY + COUNTER COMBINATIONS:")
+    print("-" * 80)
+    sorted_combined = sorted(combined_counts.items(), key=lambda x: x[1], reverse=True)
+    for i, ((category, counter), count) in enumerate(sorted_combined[:top_n], 1):
+        # Truncate long names for display
+        cat_short = category[:35] + "..." if len(category) > 35 else category
+        cnt_short = counter[:35] + "..." if len(counter) > 35 else counter
+        print(f"{i:3}. {cat_short:38} | {cnt_short:38} [{count:3}]")
+
+    # Print totals
+    print(f"\n📈 TOTALS:")
+    print("-" * 80)
+    print(f"Total unique categories: {len(category_counts)}")
+    print(f"Total unique counters: {len(counter_counts)}")
+    print(f"Total unique combinations: {len(combined_counts)}")
+    total_columns = sum(category_counts.values())
+    print(f"Total columns (with category): {total_columns}")
+    print("=" * 80)
