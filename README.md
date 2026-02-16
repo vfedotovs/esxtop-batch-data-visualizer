@@ -188,6 +188,12 @@ This allows you to import the package from anywhere while making live edits.
 - [x] VMDK Read/Write latency summary tables
 
 **Planned:**
+- [ ] Latency threshold alerting - Highlight VMDKs/devices exceeding thresholds (e.g., >20ms warning, >50ms critical) with color-coded output
+- [ ] Percentile statistics (P50/P95/P99) - Add percentile latency metrics to summary tables for better tail latency analysis
+- [ ] CSV/JSON export of summary tables - Export latency summaries for Excel analysis or monitoring tool integration
+- [ ] Multi-file comparison - Compare metrics between two esxtop captures (before/after analysis)
+- [ ] Interactive HTML report - Generate standalone HTML with embedded Plotly charts for easy sharing
+- [ ] IOPS/throughput analysis - Add Commands/sec and KB/sec metrics alongside latency
+- [ ] REST API endpoints - Expand web interface with API for automation/CI integration
 - [ ] Support multiple column extraction and chart overlay
-- [ ] Export charts as PDF
 - [ ] Expand test coverage with fixtures
