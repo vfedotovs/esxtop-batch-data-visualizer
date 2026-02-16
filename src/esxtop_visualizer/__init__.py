@@ -30,6 +30,8 @@ from .extractor import (
     extract_column_data,
     save_time_series,
     extract_and_save,
+    extract_multiple_columns,
+    extract_and_save_batch,
 )
 
 # Public API exports from visualizer module
@@ -52,6 +54,8 @@ __all__ = [
     "extract_column_data",
     "save_time_series",
     "extract_and_save",
+    "extract_multiple_columns",
+    "extract_and_save_batch",
     # Visualizer
     "load_data_file",
     "plot_time_series",

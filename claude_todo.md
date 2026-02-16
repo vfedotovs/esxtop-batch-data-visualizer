@@ -72,7 +72,10 @@
 
 ### 8. Shell Script Fragility
 - `describe_extop.sh` uses fragile glob patterns
-- Multiple full-file scans for 400MB files (inefficient)
+- ~~Multiple full-file scans for 400MB files (inefficient)~~ ✅ FIXED
+  - Implemented batch extraction: `extract_columns_batch.py` reads file once and extracts all columns
+  - Performance improvement: O(N) → O(1) file scans (where N = number of columns)
+  - Updated `describe_extop.sh` to use batch extraction instead of loop
 
 ### 9. No Input Validation
 - Timestamp format is rigid (MM/DD/YYYY HH:MM:SS only)

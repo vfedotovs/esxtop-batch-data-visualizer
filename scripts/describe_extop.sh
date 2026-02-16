@@ -166,15 +166,16 @@ total_data_point_files=${#vdisk_wr_col_numbers[@]}
 counter=0
 generated_files=()
 
-#   Iterate over the array
+#   Extract all columns in a single pass (efficient for large files)
 echo "Started extracting data points based on index list..."
+echo "Extracting $total_data_point_files columns in a single pass (efficient)..."
+python3 scripts/extract_columns_batch.py "$input_file" "${vdisk_wr_col_numbers[@]}"
+
+# Build generated_files array
 for num in "${vdisk_wr_col_numbers[@]}"; do
-  ((counter++))
-  progress=$((counter * 100 / total_data_point_files))
-  echo "Creating data files...($progress% complete)"
-  python3 scripts/extract_column.py "$input_file" "$num"
   generated_files+=("col_${num}.data")
 done
+echo "Extraction complete!"
 
 
 echo "Creating vdisk average and max write latency ms table for each vmdk (sorted by average)..."

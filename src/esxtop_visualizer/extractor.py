@@ -8,7 +8,7 @@ in PDH-CSV format esxtop batch exports.
 import csv
 import re
 from collections import OrderedDict
-from typing import Dict, Optional, Iterator, Tuple
+from typing import Dict, Optional, Iterator, Tuple, List
 
 
 class TimeSeriesData:
@@ -153,3 +153,105 @@ def extract_and_save(
     save_time_series(time_series, output_file)
 
     return output_file
+
+
+def extract_multiple_columns(
+    filename: str,
+    column_indices: List[int]
+) -> Dict[int, TimeSeriesData]:
+    """Extract time series data from multiple CSV columns in a single pass.
+
+    This is much more efficient than calling extract_column_data multiple times
+    for large files, as it only reads the CSV file once.
+
+    Args:
+        filename: Path to CSV file
+        column_indices: List of zero-based column indices to extract
+
+    Returns:
+        Dictionary mapping column index to TimeSeriesData object
+
+    Raises:
+        FileNotFoundError: If CSV file doesn't exist
+        ValueError: If CSV cannot be parsed
+
+    Example:
+        >>> results = extract_multiple_columns("esxtop_batch.csv", [100, 200, 300])
+        >>> print(f"Extracted data for {len(results)} columns")
+        >>> for col_idx, data in results.items():
+        ...     print(f"Column {col_idx}: {len(data)} points")
+    """
+    # Initialize TimeSeriesData for each column
+    time_series_map = {idx: TimeSeriesData() for idx in column_indices}
+
+    try:
+        with open(filename, newline='', encoding='utf-8-sig') as csvfile:
+            reader = csv.reader(csvfile)
+
+            for row in reader:
+                # Look for timestamp in any column
+                timestamp = None
+                for cell in row:
+                    cell_clean = cell.strip('"')
+                    if TIMESTAMP_PATTERN.fullmatch(cell_clean):
+                        timestamp = cell_clean
+                        break
+
+                if timestamp:
+                    # Extract value from each target column
+                    for col_idx in column_indices:
+                        try:
+                            value = float(row[col_idx])
+                            time_series_map[col_idx].add_point(timestamp, value)
+                        except (IndexError, ValueError):
+                            time_series_map[col_idx].add_point(timestamp, None)
+
+        return time_series_map
+
+    except FileNotFoundError:
+        raise FileNotFoundError(f"CSV file '{filename}' not found")
+    except Exception as e:
+        raise ValueError(f"Error extracting data: {e}")
+
+
+def extract_and_save_batch(
+    filename: str,
+    column_indices: List[int],
+    output_dir: str = "."
+) -> List[str]:
+    """Extract multiple columns and save each to a separate .data file.
+
+    This function reads the CSV file once and extracts all specified columns,
+    then saves each to col_{index}.data. Much more efficient than multiple
+    individual extractions for large files.
+
+    Args:
+        filename: Path to CSV file
+        column_indices: List of column indices to extract
+        output_dir: Directory to save output files (default: current directory)
+
+    Returns:
+        List of created output file paths
+
+    Raises:
+        FileNotFoundError: If CSV file doesn't exist
+        ValueError: If CSV cannot be parsed
+
+    Example:
+        >>> files = extract_and_save_batch("esxtop_batch.csv", [100, 200, 300])
+        >>> print(f"Created {len(files)} files: {files}")
+        Created 3 files: ['col_100.data', 'col_200.data', 'col_300.data']
+    """
+    import os
+
+    # Extract all columns in one pass
+    results = extract_multiple_columns(filename, column_indices)
+
+    # Save each column to a file
+    output_files = []
+    for col_idx, time_series in results.items():
+        output_file = os.path.join(output_dir, f"col_{col_idx}.data")
+        save_time_series(time_series, output_file)
+        output_files.append(output_file)
+
+    return output_files
