@@ -4,6 +4,9 @@
 # Extracts and analyzes Physical Disk SCSI Device (naa.*) metrics
 # Creates tables for Average Driver MilliSec/Read and Average Driver MilliSec/Write
 
+# Resolve script directory for reliable Python script paths
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
 # Get the first argument passed to the script
 input_file="$1"
 
@@ -61,7 +64,7 @@ if [ -f "pdisk_avg_driver_ms_read__all_col_ids" ]; then
 fi
 
 # Find columns matching Physical Disk SCSI Device with naa.* and Average Driver MilliSec/Read
-python3 scripts/find_column_idx.py "$input_file" | \
+python3 "$SCRIPT_DIR/find_column_idx.py" "$input_file" | \
   grep -E "Physical Disk SCSI Device.*naa\." | \
   grep -E "Average Driver MilliSec/Read" > pdisk_avg_driver_ms_read__all_col_ids
 
@@ -100,7 +103,7 @@ else
 
   # Extract all READ columns in a single pass
   echo "Extracting $total_pdisk_read_files columns in a single pass..."
-  python3 scripts/extract_columns_batch.py "$input_file" "${pdisk_rd_col_numbers[@]}"
+  python3 "$SCRIPT_DIR/extract_columns_batch.py" "$input_file" "${pdisk_rd_col_numbers[@]}"
 
   # Build generated_files array
   for num in "${pdisk_rd_col_numbers[@]}"; do
@@ -156,7 +159,7 @@ if [ -f "pdisk_avg_driver_ms_write__all_col_ids" ]; then
 fi
 
 # Find columns matching Physical Disk SCSI Device with naa.* and Average Driver MilliSec/Write
-python3 scripts/find_column_idx.py "$input_file" | \
+python3 "$SCRIPT_DIR/find_column_idx.py" "$input_file" | \
   grep -E "Physical Disk SCSI Device.*naa\." | \
   grep -E "Average Driver MilliSec/Write" > pdisk_avg_driver_ms_write__all_col_ids
 
@@ -195,7 +198,7 @@ else
 
   # Extract all WRITE columns in a single pass
   echo "Extracting $total_pdisk_write_files columns in a single pass..."
-  python3 scripts/extract_columns_batch.py "$input_file" "${pdisk_wr_col_numbers[@]}"
+  python3 "$SCRIPT_DIR/extract_columns_batch.py" "$input_file" "${pdisk_wr_col_numbers[@]}"
 
   # Build generated_files array
   for num in "${pdisk_wr_col_numbers[@]}"; do

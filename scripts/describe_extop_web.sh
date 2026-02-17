@@ -1,6 +1,9 @@
 #!/bin/bash
 
 
+# Resolve script directory for reliable Python script paths
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
 # Get the first argument passed to the script
 input_file="$1"
 
@@ -116,7 +119,7 @@ if [ -f "vdisk_avg_ms_write__all_col_ids" ]; then
 fi
 
 
-python3 scripts/find_column_idx.py "$input_file"| grep -E "\Average MilliSec/Write" > vdisk_avg_ms_write__all_col_ids
+python3 "$SCRIPT_DIR/find_column_idx.py" "$input_file"| grep -E "\Average MilliSec/Write" > vdisk_avg_ms_write__all_col_ids
 
 
 vdisk_avg_wr_ms_index_count=$(cat vdisk_avg_ms_write__all_col_ids | wc -l)
@@ -153,7 +156,7 @@ generated_files=()
 #   Extract all columns in a single pass (efficient for large files)
 echo "Started extracting data points based on index list..."
 echo "Extracting $total_data_point_files columns in a single pass (efficient)..."
-python3 scripts/extract_columns_batch.py "$input_file" "${vdisk_wr_col_numbers[@]}"
+python3 "$SCRIPT_DIR/extract_columns_batch.py" "$input_file" "${vdisk_wr_col_numbers[@]}"
 
 # Build generated_files array
 for num in "${vdisk_wr_col_numbers[@]}"; do
@@ -206,7 +209,7 @@ if [ -f "vdisk_avg_ms_read__all_col_ids" ]; then
     rm vdisk_avg_ms_read__all_col_ids
 fi
 
-python3 scripts/find_column_idx.py "$input_file"| grep -E "\Average MilliSec/Read" > vdisk_avg_ms_read__all_col_ids
+python3 "$SCRIPT_DIR/find_column_idx.py" "$input_file"| grep -E "\Average MilliSec/Read" > vdisk_avg_ms_read__all_col_ids
 
 vdisk_avg_rd_ms_index_count=$(cat vdisk_avg_ms_read__all_col_ids | wc -l)
 echo "Counting SCSI Read indexes..."
@@ -240,7 +243,7 @@ generated_files_read=()
 # Extract all READ columns in a single pass (efficient for large files)
 echo "Started extracting Read data points based on index list..."
 echo "Extracting $total_data_point_files_read columns in a single pass (efficient)..."
-python3 scripts/extract_columns_batch.py "$input_file" "${vdisk_rd_col_numbers[@]}"
+python3 "$SCRIPT_DIR/extract_columns_batch.py" "$input_file" "${vdisk_rd_col_numbers[@]}"
 
 # Build generated_files_read array
 for num in "${vdisk_rd_col_numbers[@]}"; do
