@@ -1,44 +1,49 @@
+# NOTE: .dockerignore patterns are root-anchored. A bare `__pycache__` or
+# `*.csv` only matches at the top of the build context, so nested copies are
+# still sent to the daemon and baked into the image. Keep the `**/` prefix on
+# anything that can appear in a subdirectory.
+
 # Git
 .git
 .gitignore
 
 # Python
-__pycache__
-*.pyc
-*.pyo
-.pytest_cache
-.coverage
-htmlcov
-*.egg-info
-dist
-build
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/.pytest_cache
+**/.coverage
+**/htmlcov
+**/*.egg-info
+**/dist
+**/build
 
 # Virtual environments
-.venv
-venv
-env
+**/.venv
+**/venv
+**/env
 
 # IDE
-.idea
-.vscode
-*.swp
-*.swo
+**/.idea
+**/.vscode
+**/*.swp
+**/*.swo
 
-# Data files (should be uploaded via web interface)
-*.csv
-*.data
-*.png
-*_col_ids
+# Data files (should be uploaded via web interface). Captures identify real
+# ESXi hosts, VMs and LUNs, so these must never reach a published image.
+**/*.csv
+**/*.data
+**/*.png
+**/*_col_ids
 
 # Meta files
-*.meta
+**/*.meta
 
 # Legacy
 legacy/
 
 # Documentation
-*.md
-!templates/*.html
+**/*.md
 
 # Tests
 tests/
