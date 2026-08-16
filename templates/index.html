@@ -3,8 +3,95 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="light dark">
     <title>esxtop Batch Data Analyzer</title>
+    <script>
+        // Applied before first paint so a saved dark choice does not flash white.
+        (function () {
+            try {
+                var saved = localStorage.getItem('theme');
+                if (saved === 'dark' || saved === 'light') {
+                    document.documentElement.setAttribute('data-theme', saved);
+                }
+            } catch (e) { /* private mode: fall back to the system preference */ }
+        })();
+    </script>
     <style>
+        /* Light palette is the base. Dark is redefined twice: once for the
+           system preference (guarded so an explicit light choice wins) and
+           once for the explicit toggle. */
+        :root {
+            --bg: #f5f5f5;
+            --surface: #ffffff;
+            --surface-alt: #f8f9fa;
+            --text: #333333;
+            --heading: #2c3e50;
+            --muted: #7f8c8d;
+            --border: #dddddd;
+            --accent: #3498db;
+            --accent-hover: #2980b9;
+            --accent-soft: #e3f2fd;
+            --success: #4caf50;
+            --success-soft: #e8f5e9;
+            --download: #27ae60;
+            --download-hover: #219a52;
+            --error-bg: #ffebee;
+            --error-text: #c62828;
+            --disabled: #bdc3c7;
+            --spinner-track: #f3f3f3;
+            --shadow: rgba(0, 0, 0, 0.1);
+            /* The console keeps its terminal look in both themes. */
+            --console-bg: #1e1e1e;
+            --console-text: #d4d4d4;
+        }
+        @media (prefers-color-scheme: dark) {
+            :root:not([data-theme="light"]) {
+                --bg: #14171a;
+                --surface: #1e2227;
+                --surface-alt: #262b31;
+                --text: #e4e6e8;
+                --heading: #eaf2f8;
+                --muted: #9aa4ad;
+                --border: #333a42;
+                --accent: #4aa3df;
+                --accent-hover: #6bb6e8;
+                --accent-soft: rgba(74, 163, 223, 0.16);
+                --success: #5cb860;
+                --success-soft: rgba(92, 184, 96, 0.16);
+                --download: #2e9e5b;
+                --download-hover: #35b268;
+                --error-bg: rgba(198, 40, 40, 0.18);
+                --error-text: #ff9a94;
+                --disabled: #4a5058;
+                --spinner-track: #333a42;
+                --shadow: rgba(0, 0, 0, 0.5);
+                --console-bg: #16191c;
+                --console-text: #d4d4d4;
+            }
+        }
+        :root[data-theme="dark"] {
+            --bg: #14171a;
+            --surface: #1e2227;
+            --surface-alt: #262b31;
+            --text: #e4e6e8;
+            --heading: #eaf2f8;
+            --muted: #9aa4ad;
+            --border: #333a42;
+            --accent: #4aa3df;
+            --accent-hover: #6bb6e8;
+            --accent-soft: rgba(74, 163, 223, 0.16);
+            --success: #5cb860;
+            --success-soft: rgba(92, 184, 96, 0.16);
+            --download: #2e9e5b;
+            --download-hover: #35b268;
+            --error-bg: rgba(198, 40, 40, 0.18);
+            --error-text: #ff9a94;
+            --disabled: #4a5058;
+            --spinner-track: #333a42;
+            --shadow: rgba(0, 0, 0, 0.5);
+            --console-bg: #16191c;
+            --console-text: #d4d4d4;
+        }
         * {
             box-sizing: border-box;
         }
@@ -13,37 +100,60 @@
             max-width: 1200px;
             margin: 0 auto;
             padding: 20px;
-            background: #f5f5f5;
-            color: #333;
+            background: var(--bg);
+            color: var(--text);
+        }
+        .page-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 15px;
+            border-bottom: 3px solid var(--accent);
+            padding-bottom: 10px;
+            margin-bottom: 20px;
         }
         h1 {
-            color: #2c3e50;
-            border-bottom: 3px solid #3498db;
-            padding-bottom: 10px;
+            color: var(--heading);
+            margin: 0;
+        }
+        .theme-toggle {
+            flex-shrink: 0;
+            background: var(--surface);
+            color: var(--text);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 8px 16px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background 0.2s, border-color 0.2s;
+        }
+        .theme-toggle:hover {
+            background: var(--surface-alt);
+            border-color: var(--accent);
         }
         .container {
-            background: white;
+            background: var(--surface);
             padding: 30px;
             border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 10px var(--shadow);
             margin-bottom: 20px;
         }
         .upload-area {
-            border: 3px dashed #3498db;
+            border: 3px dashed var(--accent);
             border-radius: 8px;
             padding: 40px;
             text-align: center;
             cursor: pointer;
             transition: all 0.3s ease;
-            background: #f8f9fa;
+            background: var(--surface-alt);
         }
         .upload-area:hover, .upload-area.dragover {
-            background: #e3f2fd;
-            border-color: #2196f3;
+            background: var(--accent-soft);
+            border-color: var(--accent-hover);
         }
         .upload-area.has-file {
-            background: #e8f5e9;
-            border-color: #4caf50;
+            background: var(--success-soft);
+            border-color: var(--success);
         }
         .upload-icon {
             font-size: 48px;
@@ -55,12 +165,12 @@
         .file-name {
             margin-top: 10px;
             font-weight: bold;
-            color: #4caf50;
+            color: var(--success);
         }
         .options {
             margin: 20px 0;
             padding: 20px;
-            background: #f8f9fa;
+            background: var(--surface-alt);
             border-radius: 8px;
         }
         .options label {
@@ -71,9 +181,9 @@
         .options input[type="radio"] {
             margin-right: 10px;
         }
-        button {
-            background: #3498db;
-            color: white;
+        #analyzeBtn {
+            background: var(--accent);
+            color: #ffffff;
             border: none;
             padding: 15px 40px;
             font-size: 16px;
@@ -81,11 +191,11 @@
             cursor: pointer;
             transition: background 0.3s;
         }
-        button:hover {
-            background: #2980b9;
+        #analyzeBtn:hover {
+            background: var(--accent-hover);
         }
-        button:disabled {
-            background: #bdc3c7;
+        #analyzeBtn:disabled {
+            background: var(--disabled);
             cursor: not-allowed;
         }
         .results {
@@ -95,9 +205,10 @@
             display: block;
         }
         .output {
-            background: #1e1e1e;
-            color: #d4d4d4;
+            background: var(--console-bg);
+            color: var(--console-text);
             padding: 20px;
+            border: 1px solid var(--border);
             border-radius: 8px;
             font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
             font-size: 13px;
@@ -118,14 +229,14 @@
             display: inline-block;
             margin: 5px 10px 5px 0;
             padding: 8px 15px;
-            background: #27ae60;
-            color: white;
+            background: var(--download);
+            color: #ffffff;
             text-decoration: none;
             border-radius: 4px;
             font-size: 14px;
         }
         .files-list a:hover {
-            background: #219a52;
+            background: var(--download-hover);
         }
         .loading {
             display: none;
@@ -136,8 +247,8 @@
             display: block;
         }
         .spinner {
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid #3498db;
+            border: 4px solid var(--spinner-track);
+            border-top: 4px solid var(--accent);
             border-radius: 50%;
             width: 50px;
             height: 50px;
@@ -149,15 +260,16 @@
             100% { transform: rotate(360deg); }
         }
         .error {
-            background: #ffebee;
-            color: #c62828;
+            background: var(--error-bg);
+            color: var(--error-text);
             padding: 15px;
             border-radius: 8px;
             margin-top: 10px;
+            white-space: pre-wrap;
         }
         .success-badge {
-            background: #4caf50;
-            color: white;
+            background: var(--success);
+            color: #ffffff;
             padding: 5px 15px;
             border-radius: 20px;
             font-size: 14px;
@@ -165,7 +277,7 @@
         }
         .error-badge {
             background: #f44336;
-            color: white;
+            color: #ffffff;
             padding: 5px 15px;
             border-radius: 20px;
             font-size: 14px;
@@ -173,15 +285,19 @@
         }
         footer {
             text-align: center;
-            color: #7f8c8d;
+            color: var(--muted);
             margin-top: 40px;
             padding-top: 20px;
-            border-top: 1px solid #ddd;
+            border-top: 1px solid var(--border);
         }
     </style>
 </head>
 <body>
-    <h1>esxtop Batch Data Analyzer</h1>
+    <div class="page-header">
+        <h1>esxtop Batch Data Analyzer</h1>
+        <button type="button" class="theme-toggle" id="themeToggle"
+                aria-label="Toggle dark mode"><span id="themeIcon">🌙</span> <span id="themeLabel">Dark</span></button>
+    </div>
 
     <div class="container">
         <div class="upload-area" id="uploadArea">
@@ -225,10 +341,47 @@
     </div>
 
     <footer>
-        <p>esxtop Batch Data Visualizer v1.0.0</p>
+        <p>esxtop Batch Data Visualizer v{{ version }}</p>
     </footer>
 
     <script>
+        // --- Theme toggle -------------------------------------------------
+        // No stored choice means "follow the system", so the button label is
+        // derived from what is actually on screen rather than from storage.
+        const themeToggle = document.getElementById('themeToggle');
+        const themeIcon = document.getElementById('themeIcon');
+        const themeLabel = document.getElementById('themeLabel');
+        const systemDark = window.matchMedia('(prefers-color-scheme: dark)');
+
+        function currentTheme() {
+            const explicit = document.documentElement.getAttribute('data-theme');
+            if (explicit) return explicit;
+            return systemDark.matches ? 'dark' : 'light';
+        }
+
+        function paintToggle() {
+            const dark = currentTheme() === 'dark';
+            // The button advertises what it switches *to*.
+            themeIcon.textContent = dark ? '☀️' : '🌙';
+            themeLabel.textContent = dark ? 'Light' : 'Dark';
+            themeToggle.setAttribute('aria-pressed', String(dark));
+        }
+
+        themeToggle.addEventListener('click', () => {
+            const next = currentTheme() === 'dark' ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-theme', next);
+            try { localStorage.setItem('theme', next); } catch (e) { /* ignore */ }
+            paintToggle();
+        });
+
+        // Track the system preference while no explicit choice is stored.
+        systemDark.addEventListener('change', () => {
+            if (!document.documentElement.getAttribute('data-theme')) paintToggle();
+        });
+
+        paintToggle();
+
+        // --- Upload and analysis -----------------------------------------
         const uploadArea = document.getElementById('uploadArea');
         const fileInput = document.getElementById('fileInput');
         const fileName = document.getElementById('fileName');
