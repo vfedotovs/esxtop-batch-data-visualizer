@@ -238,6 +238,32 @@
         .files-list a:hover {
             background: var(--download-hover);
         }
+        .working-files {
+            margin-top: 15px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: var(--surface-alt);
+        }
+        .working-files > summary {
+            cursor: pointer;
+            padding: 12px 15px;
+            color: var(--muted);
+            font-size: 14px;
+            user-select: none;
+        }
+        .working-files > summary:hover {
+            color: var(--text);
+        }
+        .working-files-note {
+            margin: 0 15px;
+            color: var(--muted);
+            font-size: 13px;
+        }
+        .working-files-list {
+            padding: 5px 15px 15px;
+            max-height: 260px;
+            overflow-y: auto;
+        }
         .loading {
             display: none;
             text-align: center;
@@ -440,6 +466,55 @@
             return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
         }
 
+        // A real capture yields one col_<n>.data per matched column, which can
+        // run to hundreds of links and bury the readable report. Those and the
+        // *_col_ids index listings are working files of the analysis, so they
+        // are collapsed rather than dropped: still downloadable, just not the
+        // first thing on the page.
+        function isIntermediate(name) {
+            return /^col_\d+\.data$/.test(name) || name.endsWith('_col_ids');
+        }
+
+        function columnNumber(name) {
+            const m = name.match(/^col_(\d+)\.data$/);
+            return m ? parseInt(m[1], 10) : Number.MAX_SAFE_INTEGER;
+        }
+
+        function fileLink(dir, name) {
+            return `<a href="/download/${encodeURIComponent(dir)}/${encodeURIComponent(name)}"
+                       target="_blank" rel="noopener">${name}</a>`;
+        }
+
+        function renderFiles(files, dir) {
+            if (!files || files.length === 0) {
+                filesList.innerHTML = '';
+                return;
+            }
+
+            const primary = files.filter(f => !isIntermediate(f));
+            const working = files.filter(isIntermediate)
+                                 .sort((a, b) => columnNumber(a) - columnNumber(b) ||
+                                                 a.localeCompare(b));
+
+            let html = '';
+            if (primary.length > 0) {
+                html += '<h3>Generated Files:</h3>' +
+                        primary.map(f => fileLink(dir, f)).join('');
+            }
+            if (working.length > 0) {
+                html += `<details class="working-files">
+                             <summary>Working files (${working.length})</summary>
+                             <p class="working-files-note">Per-column extracts and column-index
+                                listings produced during analysis. The report above is generated
+                                from these.</p>
+                             <div class="working-files-list">
+                                 ${working.map(f => fileLink(dir, f)).join('')}
+                             </div>
+                         </details>`;
+            }
+            filesList.innerHTML = html;
+        }
+
         analyzeBtn.addEventListener('click', async () => {
             if (!selectedFile) return;
 
@@ -484,16 +559,7 @@
 
                     output.textContent = data.output || 'No output generated';
 
-                    // Show downloadable files
-                    if (data.files && data.files.length > 0) {
-                        let filesHtml = '<h3>Generated Files:</h3>';
-                        data.files.forEach(file => {
-                            filesHtml += `<a href="/download/${data.output_dir}/${file}" target="_blank">${file}</a>`;
-                        });
-                        filesList.innerHTML = filesHtml;
-                    } else {
-                        filesList.innerHTML = '';
-                    }
+                    renderFiles(data.files, data.output_dir);
                 }
             } catch (err) {
                 loading.classList.remove('visible');
