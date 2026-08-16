@@ -4,6 +4,55 @@
 # Resolve script directory for reliable Python script paths
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
+# Render a latency summary as a fixed-width table, worst first.
+#
+# Input is the tab-separated scratch file built by the callers:
+#   sort_key <TAB> avg <TAB> max <TAB> column <TAB> name <TAB> sample_count
+#
+# Rows are sorted by average descending, so the disk that needs attention is
+# the first thing read rather than the last. A capture mixes VM-level rollups
+# with the per-VMDK counters underneath them, and the two are easy to confuse
+# when the numbers repeat, so SCOPE labels which is which.
+print_latency_table() {
+  local title="$1"
+  local data_file="$2"
+  local rule="-------------------------------------------------------------------"
+
+  echo
+  echo -e "\033[1m${title}\033[0m"
+  echo "$rule"
+  printf "%-5s  %-30s  %9s  %9s  %8s\n" "SCOPE" "VMDK" "AVG ms" "MAX ms" "COLUMN"
+  echo "$rule"
+
+  local rows=0
+  local idle=0
+  local nodata=0
+  while IFS=$'\t' read -r sort_key avg max col name samples; do
+    [ -z "$name" ] && continue
+    rows=$((rows + 1))
+
+    # "vm1:scsi0:0" is a single virtual disk; "vm1" is the rollup across them.
+    local scope="vm"
+    case "$name" in
+      *:scsi*) scope="vmdk" ;;
+    esac
+
+    printf "%-5s  %-30s  %9s  %9s  %8s\n" "$scope" "$name" "$avg" "$max" "$col"
+
+    if [ "$avg" = "n/a" ]; then
+      nodata=$((nodata + 1))
+    elif [ "$samples" != "0" ] && [ "$max" = "0.0000" ]; then
+      idle=$((idle + 1))
+    fi
+  done < <(sort -k1,1nr "$data_file")
+
+  echo "$rule"
+  printf "  %s counters" "$rows"
+  [ "$idle" -gt 0 ] && printf ", %s idle (no latency recorded)" "$idle"
+  [ "$nodata" -gt 0 ] && printf ", %s with no numeric samples" "$nodata"
+  printf "\n"
+}
+
 # Get the first argument passed to the script
 input_file="$1"
 
@@ -25,26 +74,21 @@ if [[ ! -r "$input_file" ]]; then
   exit 1
 fi
 
-echo "Extracting values for summary report...please wait"
+echo "Reading capture summary..."
 
-echo "Extracting hostname..."
 # echo "-- esxtop batch capture was run on ESXi hostname: --" 
 hostname=$(cat "$input_file" | tr ',' '\n' | tr -d " "  | awk -F "\\" '{print $3}' | uniq | tr '\n' ' ')
 
 
-echo "Extracting datapoint count..."
 # echo "-- Extract batchmode collected datapoint iteration count --"
-iteration_count=$(cat "$input_file" | tr ',' '\n' | grep -E '"[0-9]{2}/[0-9]{2}/[0-9]{4} [0-9]{2}:[0-9]{2}:[0-9]{2}"' | wc -l)
+iteration_count=$(cat "$input_file" | tr ',' '\n' | grep -E '"[0-9]{2}/[0-9]{2}/[0-9]{4} [0-9]{2}:[0-9]{2}:[0-9]{2}"' | wc -l | tr -d ' ')
 
-echo "Extracting first timestamp..."
 # echo "-- Extract batchmode range interval first 3 data points --"
 first_ts=$(cat "$input_file" | tr ',' '\n' | grep -E '"[0-9]{2}/[0-9]{2}/[0-9]{4} [0-9]{2}:[0-9]{2}:[0-9]{2}"' | head -n 1)
 
-echo "Extracting last timestamp..."
 # echo "-- Extract batchmode range interval last  3 data points --"
 last_ts=$(cat "$input_file" | tr ',' '\n' | grep -E '"[0-9]{2}/[0-9]{2}/[0-9]{4} [0-9]{2}:[0-9]{2}:[0-9]{2}"' | tail -n 1)
 
-echo "Calculating time interval between first and last timestamps..."
 clean_first_ts=$(echo "$first_ts" | tr -d '"')
 clean_last_ts=$(echo "$last_ts" | tr -d '"')
 
@@ -66,17 +110,32 @@ interval_sec=$((last_epoch - first_epoch))
 
 # Print
 
-echo -e "\n \033[1mESXTOP Batch Mode Summary Report\033[0m"
-echo "=========================================="
-echo   "🔹 Hostname                        : $hostname"
-printf "🔹 Data Point Count                : %d\n" "$iteration_count"
-printf "🔹 First Timestamp                 : %s\n" "$first_ts"
-printf "🔹 Last  Timestamp                 : %s\n" "$last_ts"
-printf "🕒 Time interval between timestamps: %s seconds\n"   "$interval_sec"
-echo "=========================================="
+# Trim surrounding whitespace and the quotes the CSV carries, so the values
+# line up under a fixed label width. Emoji are deliberately absent from this
+# block: they render double-width in a monospace console and knock every
+# following column out of alignment.
+clean_hostname=$(printf '%s' "$hostname" | awk '{$1=$1; print}')
+
+# Humanise the interval alongside the raw seconds.
+if [ "$interval_sec" -ge 60 ] 2>/dev/null; then
+  interval_human=$(printf '%dm %ds' $((interval_sec / 60)) $((interval_sec % 60)))
+  interval_display="${interval_sec} seconds (${interval_human})"
+else
+  interval_display="${interval_sec} seconds"
+fi
+
+echo
+echo -e "\033[1mESXTOP BATCH MODE SUMMARY\033[0m"
+echo "==================================================================="
+printf "  %-18s : %s\n" "Hostname"        "$clean_hostname"
+printf "  %-18s : %s\n" "Data points"     "$iteration_count"
+printf "  %-18s : %s\n" "First timestamp" "$clean_first_ts"
+printf "  %-18s : %s\n" "Last timestamp"  "$clean_last_ts"
+printf "  %-18s : %s\n" "Duration"        "$interval_display"
+echo "==================================================================="
 
 
-echo -e "\n\n-- VM list that where on host during esxtop run"
+echo -e "\n\nVIRTUAL MACHINES ON HOST DURING CAPTURE\n-------------------------------------------------------------------"
 # Extract and process the header line from the file
 head -n 1 "$input_file" | \
   tr ',' '\n' | \
@@ -88,7 +147,7 @@ head -n 1 "$input_file" | \
   uniq | \
   nl 
 
-echo -e "\n\n-- scsiX:X (ONLY vmdk) list for each vm --"
+echo -e "\n\nVIRTUAL DISKS PER VM  (vm:scsiC:T)\n-------------------------------------------------------------------"
 head -n 1 "$input_file" | \
   tr ',' '\n'| \
   nl | \
@@ -111,9 +170,7 @@ head -n 1 "$input_file" | \
 #    nl
 
 # Non-interactive web version - automatically continue with analysis
-echo -e "\n\nContinuing with summary table of average latency at VM level..."
 
-echo "Creating file vdisk_avg_ms_write__all_col_ids with indexes and SCSI names..."
 if [ -f "vdisk_avg_ms_write__all_col_ids" ]; then
     rm vdisk_avg_ms_write__all_col_ids
 fi
@@ -122,12 +179,10 @@ fi
 python3 "$SCRIPT_DIR/find_column_idx.py" "$input_file"| grep -E "\Average MilliSec/Write" > vdisk_avg_ms_write__all_col_ids
 
 
-vdisk_avg_wr_ms_index_count=$(cat vdisk_avg_ms_write__all_col_ids | wc -l)
-echo "Counting SCSI Write indexes..."
-echo "Found SCSI Write index count: $vdisk_avg_wr_ms_index_count"
+vdisk_avg_wr_ms_index_count=$(cat vdisk_avg_ms_write__all_col_ids | wc -l | tr -d ' ')
+printf "\nFound %s write latency columns.\n" "$vdisk_avg_wr_ms_index_count"
 
 
-echo "Creating on disk datapiont files for each SCSI index..."
 
 # Create arrays and mapping from column index to vmdk
 declare -A vmdk_by_col
@@ -145,27 +200,22 @@ while IFS= read -r line; do
   fi
 done < vdisk_avg_ms_write__all_col_ids
 
-echo -e "\n\n-- VMDK list aligned to column indices --"
-for num in "${vdisk_wr_col_numbers[@]}"; do
-  printf "Column %-8s  %s\n" "$num" "${vmdk_by_col[$num]}"
-done
+# The column-index mapping is debugging detail: every index it prints also
+# appears in the summary table below, next to the number that matters.
 total_data_point_files=${#vdisk_wr_col_numbers[@]}
 counter=0
 generated_files=()
 
 #   Extract all columns in a single pass (efficient for large files)
-echo "Started extracting data points based on index list..."
-echo "Extracting $total_data_point_files columns in a single pass (efficient)..."
-python3 "$SCRIPT_DIR/extract_columns_batch.py" "$input_file" "${vdisk_wr_col_numbers[@]}"
+printf "Extracting %s write columns in a single pass...\n" "$total_data_point_files"
+python3 "$SCRIPT_DIR/extract_columns_batch.py" --quiet "$input_file" "${vdisk_wr_col_numbers[@]}"
 
 # Build generated_files array
 for num in "${vdisk_wr_col_numbers[@]}"; do
   generated_files+=("col_${num}.data")
 done
-echo "Extraction complete!"
 
 
-echo "Creating vdisk average and max write latency ms table for each vmdk (sorted by average)..."
 tmp_summary=$(mktemp)
 for file in "${generated_files[@]}"; do
   col_num=$(printf '%s\n' "$file" | sed -n 's/.*col_\([0-9][0-9]*\)\.data/\1/p')
@@ -177,45 +227,32 @@ for file in "${generated_files[@]}"; do
       n++
     }
     END {
+      # Sort key first. Columns with no numeric samples get -1 so they land at
+      # the bottom of a descending sort instead of impersonating the worst.
       if (n > 0) {
         avg = sum/n
-        printf "%.10f\t%.4f\t%.4f\t%s\t%s\n", avg, avg, max, FILENAME, vmdk
+        printf "%.10f\t%.4f\t%.4f\t%s\t%s\t%s\n", avg, avg, max, col, vmdk, n
       } else {
-        printf "9999999999\tNaN\tNaN\t%s\t%s\n", FILENAME, vmdk
+        printf "-1\tn/a\tn/a\t%s\t%s\t0\n", col, vmdk
       }
     }
-  ' vmdk="$vmdk_name" "$file" >> "$tmp_summary"
+  ' vmdk="$vmdk_name" col="$col_num" "$file" >> "$tmp_summary"
 done
 
-echo -e "\n\033[1mSCSI Write Latency Summary (Average MilliSec/Write)\033[0m"
-echo "=========================================="
-sort -k1,1n "$tmp_summary" | while IFS=$'\t' read -r avg_num avg_disp max_disp file vmdk; do
-  printf "VMDK: %s  File: %s  Average: %s  Max: %s\n" "$vmdk" "$file" "$avg_disp" "$max_disp"
-  if [ "$avg_disp" = "NaN" ]; then
-    printf "Warning: no numeric samples in %s\n" "$file"
-  fi
-done
+print_latency_table "SCSI WRITE LATENCY  (Average MilliSec/Write)" "$tmp_summary"
 rm -f "$tmp_summary"
 
 # ============================================================
 # SCSI READ LATENCY TABLE (Average MilliSec/Read)
 # ============================================================
-echo -e "\n\n=========================================="
-echo "Creating SCSI Read Latency Table..."
-echo "=========================================="
-
-echo "Creating file vdisk_avg_ms_read__all_col_ids with indexes and SCSI names..."
 if [ -f "vdisk_avg_ms_read__all_col_ids" ]; then
     rm vdisk_avg_ms_read__all_col_ids
 fi
 
 python3 "$SCRIPT_DIR/find_column_idx.py" "$input_file"| grep -E "\Average MilliSec/Read" > vdisk_avg_ms_read__all_col_ids
 
-vdisk_avg_rd_ms_index_count=$(cat vdisk_avg_ms_read__all_col_ids | wc -l)
-echo "Counting SCSI Read indexes..."
-echo "Found SCSI Read index count: $vdisk_avg_rd_ms_index_count"
-
-echo "Creating on disk datapoint files for each SCSI Read index..."
+vdisk_avg_rd_ms_index_count=$(cat vdisk_avg_ms_read__all_col_ids | wc -l | tr -d ' ')
+printf "\n\nFound %s read latency columns.\n" "$vdisk_avg_rd_ms_index_count"
 
 # Create arrays and mapping from column index to vmdk for READ
 declare -A vmdk_by_col_read
@@ -233,25 +270,18 @@ while IFS= read -r line; do
   fi
 done < vdisk_avg_ms_read__all_col_ids
 
-echo -e "\n\n-- VMDK list aligned to column indices (Read) --"
-for num in "${vdisk_rd_col_numbers[@]}"; do
-  printf "Column %-8s  %s\n" "$num" "${vmdk_by_col_read[$num]}"
-done
 total_data_point_files_read=${#vdisk_rd_col_numbers[@]}
 generated_files_read=()
 
 # Extract all READ columns in a single pass (efficient for large files)
-echo "Started extracting Read data points based on index list..."
-echo "Extracting $total_data_point_files_read columns in a single pass (efficient)..."
-python3 "$SCRIPT_DIR/extract_columns_batch.py" "$input_file" "${vdisk_rd_col_numbers[@]}"
+printf "Extracting %s read columns in a single pass...\n" "$total_data_point_files_read"
+python3 "$SCRIPT_DIR/extract_columns_batch.py" --quiet "$input_file" "${vdisk_rd_col_numbers[@]}"
 
 # Build generated_files_read array
 for num in "${vdisk_rd_col_numbers[@]}"; do
   generated_files_read+=("col_${num}.data")
 done
-echo "Read extraction complete!"
 
-echo "Creating vdisk average and max read latency ms table for each vmdk (sorted by average)..."
 tmp_summary_read=$(mktemp)
 for file in "${generated_files_read[@]}"; do
   col_num=$(printf '%s\n' "$file" | sed -n 's/.*col_\([0-9][0-9]*\)\.data/\1/p')
@@ -265,20 +295,13 @@ for file in "${generated_files_read[@]}"; do
     END {
       if (n > 0) {
         avg = sum/n
-        printf "%.10f\t%.4f\t%.4f\t%s\t%s\n", avg, avg, max, FILENAME, vmdk
+        printf "%.10f\t%.4f\t%.4f\t%s\t%s\t%s\n", avg, avg, max, col, vmdk, n
       } else {
-        printf "9999999999\tNaN\tNaN\t%s\t%s\n", FILENAME, vmdk
+        printf "-1\tn/a\tn/a\t%s\t%s\t0\n", col, vmdk
       }
     }
-  ' vmdk="$vmdk_name" "$file" >> "$tmp_summary_read"
+  ' vmdk="$vmdk_name" col="$col_num" "$file" >> "$tmp_summary_read"
 done
 
-echo -e "\n\033[1mSCSI Read Latency Summary (Average MilliSec/Read)\033[0m"
-echo "=========================================="
-sort -k1,1n "$tmp_summary_read" | while IFS=$'\t' read -r avg_num avg_disp max_disp file vmdk; do
-  printf "VMDK: %s  File: %s  Average: %s  Max: %s\n" "$vmdk" "$file" "$avg_disp" "$max_disp"
-  if [ "$avg_disp" = "NaN" ]; then
-    printf "Warning: no numeric samples in %s\n" "$file"
-  fi
-done
+print_latency_table "SCSI READ LATENCY  (Average MilliSec/Read)" "$tmp_summary_read"
 rm -f "$tmp_summary_read"
