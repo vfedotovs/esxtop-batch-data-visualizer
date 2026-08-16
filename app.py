@@ -8,14 +8,19 @@ import os
 import subprocess
 import tempfile
 import shutil
+import time
 from pathlib import Path
 from flask import Flask, render_template, request, jsonify, send_file, redirect, url_for
 from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024  # 500MB max upload
-app.config['UPLOAD_FOLDER'] = '/tmp/esxtop_uploads'
-app.config['OUTPUT_FOLDER'] = '/tmp/esxtop_output'
+app.config['OUTPUT_FOLDER'] = os.environ.get('ESXTOP_OUTPUT_FOLDER', '/tmp/esxtop_output')
+# Uploads land in a per-analysis directory under OUTPUT_FOLDER, and are removed
+# with it. 0 disables pruning and lets the output directory grow unbounded.
+app.config['OUTPUT_RETENTION_HOURS'] = float(
+    os.environ.get('ESXTOP_OUTPUT_RETENTION_HOURS', '24')
+)
 
 ALLOWED_EXTENSIONS = {'csv'}
 
@@ -25,9 +30,37 @@ def allowed_file(filename):
 
 
 def ensure_dirs():
-    """Ensure upload and output directories exist."""
-    os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+    """Ensure the output directory exists."""
     os.makedirs(app.config['OUTPUT_FOLDER'], exist_ok=True)
+
+
+def prune_old_outputs():
+    """
+    Delete analysis directories older than OUTPUT_RETENTION_HOURS.
+
+    Without this the output volume grows by one directory per upload and is
+    never reclaimed. Errors are swallowed: another worker may be pruning the
+    same directory concurrently, and a failed cleanup must not fail the upload.
+    """
+    retention_hours = app.config['OUTPUT_RETENTION_HOURS']
+    if retention_hours <= 0:
+        return
+
+    cutoff = time.time() - retention_hours * 3600
+    output_folder = app.config['OUTPUT_FOLDER']
+
+    try:
+        entries = os.listdir(output_folder)
+    except OSError:
+        return
+
+    for name in entries:
+        path = os.path.join(output_folder, name)
+        try:
+            if os.path.isdir(path) and os.path.getmtime(path) < cutoff:
+                shutil.rmtree(path, ignore_errors=True)
+        except OSError:
+            continue
 
 
 def run_analysis(csv_path, analysis_type, output_dir):
@@ -146,6 +179,7 @@ def index():
 def upload_file():
     """Handle CSV file upload and run analysis."""
     ensure_dirs()
+    prune_old_outputs()
 
     if 'file' not in request.files:
         return jsonify({'error': 'No file provided'}), 400
@@ -196,6 +230,11 @@ def health():
     return jsonify({'status': 'healthy'})
 
 
+# Run at import so the directory exists under gunicorn, which never executes
+# the __main__ block below.
+ensure_dirs()
+
+
 if __name__ == '__main__':
-    ensure_dirs()
+    # Development entry point only. The container runs gunicorn (see Dockerfile).
     app.run(host='0.0.0.0', port=5000, debug=False)

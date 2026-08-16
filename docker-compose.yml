@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   esxtop-analyzer:
     build:
@@ -12,7 +10,8 @@ services:
       # Optional: mount a local directory for persistent output
       - esxtop_output:/tmp/esxtop_output
     environment:
-      - FLASK_ENV=production
+      # Analysis output directories older than this are pruned on each upload
+      - ESXTOP_OUTPUT_RETENTION_HOURS=24
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]

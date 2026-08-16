@@ -59,6 +59,17 @@ docker-compose down
 docker-compose up -d --build
 ```
 
+The container serves the app with gunicorn and runs as the unprivileged user
+`esxtop` (uid 10001). Analysis output is written to the `esxtop_output` volume
+under `/tmp/esxtop_output`.
+
+**Container configuration:**
+
+| Environment variable | Default | Purpose |
+|---|---|---|
+| `ESXTOP_OUTPUT_RETENTION_HOURS` | `24` | Analysis directories older than this are deleted on each upload. Set to `0` to keep everything (the volume then grows unbounded). |
+| `ESXTOP_OUTPUT_FOLDER` | `/tmp/esxtop_output` | Where per-analysis output directories are created. |
+
 ### Manual Usage
 
 1. **Collect esxtop batch data** as mentioned [here](https://knowledge.broadcom.com/external/article/370279/collecting-esxtop-batch-data-for-esxi-pe.html)
