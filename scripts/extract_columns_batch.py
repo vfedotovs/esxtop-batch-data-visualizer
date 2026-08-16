@@ -34,11 +34,22 @@ def main():
         print("  ./scripts/extract_columns_batch.py esxtop.csv 100 200 300")
         sys.exit(1)
 
-    filename = sys.argv[1]
+    # --quiet suppresses the per-column listing, which runs to one line per
+    # matched column. A real capture matches dozens, and the report that
+    # follows names every column anyway.
+    args = sys.argv[1:]
+    quiet = '--quiet' in args
+    args = [a for a in args if a != '--quiet']
+
+    if len(args) < 2:
+        print("Usage: extract_columns_batch.py [--quiet] <csv_file> <col1> [col2] ...")
+        sys.exit(1)
+
+    filename = args[0]
 
     # Parse column indices
     try:
-        column_indices = [int(col) for col in sys.argv[2:]]
+        column_indices = [int(col) for col in args[1:]]
     except ValueError:
         print("Error: Column indices must be integers")
         sys.exit(1)
@@ -48,10 +59,11 @@ def main():
         sys.exit(1)
 
     try:
-        print(f"Extracting {len(column_indices)} columns from {filename}...")
+        if not quiet:
+            print(f"Extracting {len(column_indices)} columns from {filename}...")
+            print("Reading column metadata...")
 
         # Parse CSV header to get friendly names
-        print("Reading column metadata...")
         columns = parse_csv_header(filename)
         column_map = {col.index: col for col in columns}
 
@@ -64,10 +76,13 @@ def main():
         # Extract with metadata
         output_files = extract_and_save_batch(filename, column_indices, column_titles=column_titles)
 
-        print(f"Successfully extracted {len(output_files)} columns:")
-        for idx, output_file in zip(column_indices, output_files):
-            title = column_titles.get(idx, "Unknown")
-            print(f"  - {output_file} ({title})")
+        if quiet:
+            print(f"Extracted {len(output_files)} columns.")
+        else:
+            print(f"Successfully extracted {len(output_files)} columns:")
+            for idx, output_file in zip(column_indices, output_files):
+                title = column_titles.get(idx, "Unknown")
+                print(f"  - {output_file} ({title})")
 
     except FileNotFoundError:
         print(f"Error: File '{filename}' not found.")
