@@ -4,6 +4,7 @@ Flask web application for esxtop batch data analysis.
 Provides a web interface to upload CSV files and run analysis.
 """
 
+import ast
 import os
 import subprocess
 import tempfile
@@ -23,6 +24,34 @@ app.config['OUTPUT_RETENTION_HOURS'] = float(
 )
 
 ALLOWED_EXTENSIONS = {'csv'}
+
+
+def read_version():
+    """
+    Read __version__ from the package without importing it.
+
+    src/esxtop_visualizer/__init__.py is the single source of truth (see
+    [tool.setuptools.dynamic] in pyproject.toml). Parsing the AST rather than
+    importing keeps matplotlib out of the web app's import path, and matches
+    how setuptools resolves the same value at build time.
+    """
+    init_py = Path(__file__).parent / 'src' / 'esxtop_visualizer' / '__init__.py'
+    try:
+        tree = ast.parse(init_py.read_text(encoding='utf-8'))
+    except (OSError, SyntaxError):
+        return 'unknown'
+
+    for node in tree.body:
+        if not isinstance(node, ast.Assign):
+            continue
+        for target in node.targets:
+            if isinstance(target, ast.Name) and target.id == '__version__':
+                if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
+                    return node.value.value
+    return 'unknown'
+
+
+VERSION = read_version()
 
 
 def allowed_file(filename):
@@ -172,7 +201,7 @@ def run_describe_script(csv_path, scripts_dir, script_name):
 @app.route('/')
 def index():
     """Render the main upload page."""
-    return render_template('index.html')
+    return render_template('index.html', version=VERSION)
 
 
 @app.route('/upload', methods=['POST'])
