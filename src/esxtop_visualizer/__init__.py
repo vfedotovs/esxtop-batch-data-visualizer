@@ -13,6 +13,9 @@ Example:
     >>> visualize("col_100.data", scale=100.0)
 """
 
+# Single source of truth for the package version. pyproject.toml reads this
+# via [tool.setuptools.dynamic], so bump it here only. Keep it a plain string
+# literal: setuptools parses this file statically rather than importing it.
 __version__ = "2026.8.16"
 __author__ = "esxtop-visualizer contributors"
 
