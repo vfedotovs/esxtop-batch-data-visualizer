@@ -13,7 +13,7 @@ Example:
     >>> visualize("col_100.data", scale=100.0)
 """
 
-__version__ = "1.0.0"
+__version__ = "2026.8.16"
 __author__ = "esxtop-visualizer contributors"
 
 # Public API exports from parser module

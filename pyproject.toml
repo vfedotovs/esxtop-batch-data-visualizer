@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "esxtop-visualizer"
-version = "1.0.0"
+version = "2026.8.16"
 description = "Parse and visualize VMware ESXi esxtop batch mode data"
 readme = "README.md"
 requires-python = ">=3.8"
