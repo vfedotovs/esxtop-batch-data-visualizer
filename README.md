@@ -25,7 +25,36 @@ make plot-save CSV_FILE=esxtop_batch_data.csv COL_ID=51446 SCALE=1.0
 
 ### Using Docker (Web Interface)
 
-The easiest way to use this tool is via the Docker web interface:
+The easiest way to use this tool is via the Docker web interface.
+
+#### Option 1: pull the published image (no build required)
+
+```sh
+docker run -p 5000:5000 vfedotovsdocker/esxtop-analyzer:2026.8.16
+```
+
+Published on Docker Hub as
+[`vfedotovsdocker/esxtop-analyzer`](https://hub.docker.com/r/vfedotovsdocker/esxtop-analyzer)
+for `linux/amd64` and `linux/arm64` — Docker selects the matching
+architecture automatically.
+
+```sh
+# Pin a version for reproducibility
+docker pull vfedotovsdocker/esxtop-analyzer:2026.8.16
+
+# Or track the newest build
+docker pull vfedotovsdocker/esxtop-analyzer:latest
+```
+
+To keep analysis output across container restarts, mount a volume:
+
+```sh
+docker run -p 5000:5000 \
+  -v esxtop_output:/tmp/esxtop_output \
+  vfedotovsdocker/esxtop-analyzer:2026.8.16
+```
+
+#### Option 2: build from source
 
 ```sh
 # Using docker-compose (recommended)
@@ -37,6 +66,10 @@ docker run -p 5000:5000 esxtop-analyzer
 ```
 
 Then open http://localhost:5000 in your browser.
+
+> **Note:** the web interface has no authentication and accepts uploads up to
+> 500MB. Bind it to localhost or run it on a trusted network — do not expose
+> port 5000 to the internet.
 
 **Web Interface Features:**
 - Drag-and-drop CSV file upload (up to 500MB)
