@@ -22,7 +22,9 @@ __author__ = "esxtop-visualizer contributors"
 # Public API exports from parser module
 from .parser import (
     ColumnMetadata,
+    VmdkCategory,
     parse_csv_header,
+    discover_vmdk_categories,
     find_columns_by_pattern,
     print_column_info,
     summarize_columns,
@@ -51,7 +53,9 @@ from .visualizer import (
 __all__ = [
     # Parser
     "ColumnMetadata",
+    "VmdkCategory",
     "parse_csv_header",
+    "discover_vmdk_categories",
     "find_columns_by_pattern",
     "print_column_info",
     "summarize_columns",

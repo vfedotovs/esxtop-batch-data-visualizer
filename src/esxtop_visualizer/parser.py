@@ -129,6 +129,86 @@ def parse_csv_header(filename: str) -> List[ColumnMetadata]:
         raise ValueError(f"Error parsing CSV file: {e}")
 
 
+@dataclass
+class VmdkCategory:
+    """A distinct VM VMDK stat category found in a capture's header.
+
+    One category is one (vm, vmdk, counter) triple, whatever the counter is
+    named: discovery is driven by the header alone, there is no allowlist of
+    interesting counters.
+
+    Attributes:
+        vm: VM name taken from the instance ("vm1")
+        vmdk: Virtual disk part of the instance ("scsi0:0"); empty for a
+              VM-level rollup instance
+        scope: "vmdk" for a per-VMDK instance, "vm" for a VM-level rollup
+        counter: Performance counter name (e.g. "Average MilliSec/Write")
+        columns: Zero-based header column indices carrying this category
+    """
+    vm: str
+    vmdk: str
+    scope: str
+    counter: str
+    columns: List[int]
+
+    @property
+    def instance(self) -> str:
+        """Instance string as it appears in the header ("vm1:scsi0:0")."""
+        return f"{self.vm}:{self.vmdk}" if self.vmdk else self.vm
+
+
+# A Virtual Disk category looks like "Virtual Disk(vm1)" for the VM-level
+# rollup, or "Virtual Disk(vm1:scsi0:0)" for a single virtual disk. Physical
+# Disk categories carry the same counter names and must not match.
+VIRTUAL_DISK_CATEGORY = re.compile(r"^Virtual Disk\((?P<instance>[^)]*)\)$")
+
+
+def discover_vmdk_categories(filename: str) -> List[VmdkCategory]:
+    """Discover every VM VMDK stat category present in a capture's header.
+
+    Args:
+        filename: Path to CSV file
+
+    Returns:
+        List of VmdkCategory objects in header order, one per distinct
+        (vm, vmdk, counter) triple. A category found at several columns is
+        returned once, carrying every index it was found at.
+
+    Raises:
+        FileNotFoundError: If CSV file doesn't exist
+        ValueError: If file cannot be parsed as CSV
+
+    Example:
+        >>> categories = discover_vmdk_categories("esxtop_batch.csv")
+        >>> categories[0].vm, categories[0].vmdk, categories[0].counter
+        ('vm1', 'scsi0:0', 'Average MilliSec/Write')
+    """
+    categories: Dict[Tuple[str, str, str], VmdkCategory] = {}
+
+    for col in parse_csv_header(filename):
+        match = VIRTUAL_DISK_CATEGORY.match(col.category)
+        if not match or not col.counter:
+            continue
+
+        # The first colon separates the VM from the disk: "vm1:scsi0:0".
+        vm, _, vmdk = match.group("instance").partition(":")
+        key = (vm, vmdk, col.counter)
+
+        category = categories.get(key)
+        if category is None:
+            categories[key] = VmdkCategory(
+                vm=vm,
+                vmdk=vmdk,
+                scope="vmdk" if vmdk else "vm",
+                counter=col.counter,
+                columns=[col.index],
+            )
+        else:
+            category.columns.append(col.index)
+
+    return list(categories.values())
+
+
 def find_columns_by_pattern(filename: str, pattern: str) -> List[ColumnMetadata]:
     """Find all columns matching a regex pattern.
 
