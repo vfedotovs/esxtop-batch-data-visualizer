@@ -4,16 +4,18 @@
 # Resolve script directory for reliable Python script paths
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-# Render a latency summary as a fixed-width table, worst first.
+# Render one discovered counter as a fixed-width table, worst first.
 #
-# Input is the tab-separated scratch file built by the callers:
+# Input is the tab-separated scratch file built by the caller:
 #   sort_key <TAB> avg <TAB> max <TAB> column <TAB> name <TAB> sample_count
 #
 # Rows are sorted by average descending, so the disk that needs attention is
 # the first thing read rather than the last. A capture mixes VM-level rollups
 # with the per-VMDK counters underneath them, and the two are easy to confuse
-# when the numbers repeat, so SCOPE labels which is which.
-print_latency_table() {
+# when the numbers repeat, so SCOPE labels which is which. Units are left to
+# the counter name in the title: the counters discovered in a capture are not
+# all milliseconds.
+print_counter_table() {
   local title="$1"
   local data_file="$2"
   local rule="-------------------------------------------------------------------"
@@ -21,7 +23,7 @@ print_latency_table() {
   echo
   echo -e "\033[1m${title}\033[0m"
   echo "$rule"
-  printf "%-5s  %-30s  %9s  %9s  %8s\n" "SCOPE" "VMDK" "AVG ms" "MAX ms" "COLUMN"
+  printf "%-5s  %-30s  %9s  %9s  %8s\n" "SCOPE" "VMDK" "AVG" "MAX" "COLUMN"
   echo "$rule"
 
   local rows=0
@@ -47,8 +49,8 @@ print_latency_table() {
   done < <(sort -k1,1nr "$data_file")
 
   echo "$rule"
-  printf "  %s counters" "$rows"
-  [ "$idle" -gt 0 ] && printf ", %s idle (no latency recorded)" "$idle"
+  printf "  %s columns" "$rows"
+  [ "$idle" -gt 0 ] && printf ", %s idle (nothing recorded)" "$idle"
   [ "$nodata" -gt 0 ] && printf ", %s with no numeric samples" "$nodata"
   printf "\n"
 }
@@ -171,137 +173,65 @@ head -n 1 "$input_file" | \
 
 # Non-interactive web version - automatically continue with analysis
 
-if [ -f "vdisk_avg_ms_write__all_col_ids" ]; then
-    rm vdisk_avg_ms_write__all_col_ids
+# ============================================================
+# VM VMDK STAT CATEGORIES
+#
+# The counter set is whatever the capture's header carries: discovery walks
+# every "Virtual Disk(<vm>[:<scsiC:T>])\<counter>" column and reports one
+# table per distinct counter, so a capture with N counters gets N tables.
+# ============================================================
+categories_file=$(mktemp)
+python3 "$SCRIPT_DIR/find_column_idx.py" "$input_file" --vmdk-categories > "$categories_file"
+
+if [ ! -s "$categories_file" ]; then
+  rm -f "$categories_file"
+  printf "\n\nNo VM VMDK categories found in '%s'.\n" "$input_file"
+  exit 0
 fi
 
+category_count=$(cut -f1 "$categories_file" | sort -u | wc -l | tr -d ' ')
+printf "\n\nFound %s VM VMDK stat categories.\n" "$category_count"
 
-python3 "$SCRIPT_DIR/find_column_idx.py" "$input_file"| grep -E "\Average MilliSec/Write" > vdisk_avg_ms_write__all_col_ids
+while IFS= read -r counter; do
+  # Column index -> instance name, for the counter being reported on.
+  unset vmdk_by_col
+  declare -A vmdk_by_col
+  col_numbers=()
+  while IFS=$'\t' read -r vmdk_name col_idx; do
+    [ -z "$col_idx" ] && continue
+    col_numbers+=("$col_idx")
+    vmdk_by_col["$col_idx"]="${vmdk_name:-unknown_vmdk}"
+  done < <(awk -F'\t' -v counter="$counter" '$1 == counter { print $2 "\t" $3 }' "$categories_file")
 
+  # Extract all columns of this counter in a single pass (efficient for
+  # large files).
+  printf "\nExtracting %s %s columns in a single pass...\n" "${#col_numbers[@]}" "$counter"
+  python3 "$SCRIPT_DIR/extract_columns_batch.py" --quiet "$input_file" "${col_numbers[@]}"
 
-vdisk_avg_wr_ms_index_count=$(cat vdisk_avg_ms_write__all_col_ids | wc -l | tr -d ' ')
-printf "\nFound %s write latency columns.\n" "$vdisk_avg_wr_ms_index_count"
-
-
-
-# Create arrays and mapping from column index to vmdk
-declare -A vmdk_by_col
-vdisk_wr_col_numbers=()
-while IFS= read -r line; do
-  col_idx=$(printf '%s\n' "$line" | awk '{print $2}')
-  vmdk_name=$(printf '%s\n' "$line" | sed -n 's/.*Virtual Disk(\(.*\))\\Average.*/\1/p')
-  if [ -n "$col_idx" ]; then
-    vdisk_wr_col_numbers+=("$col_idx")
-    if [ -n "$vmdk_name" ]; then
-      vmdk_by_col["$col_idx"]="$vmdk_name"
-    else
-      vmdk_by_col["$col_idx"]="unknown_vmdk"
-    fi
-  fi
-done < vdisk_avg_ms_write__all_col_ids
-
-# The column-index mapping is debugging detail: every index it prints also
-# appears in the summary table below, next to the number that matters.
-total_data_point_files=${#vdisk_wr_col_numbers[@]}
-counter=0
-generated_files=()
-
-#   Extract all columns in a single pass (efficient for large files)
-printf "Extracting %s write columns in a single pass...\n" "$total_data_point_files"
-python3 "$SCRIPT_DIR/extract_columns_batch.py" --quiet "$input_file" "${vdisk_wr_col_numbers[@]}"
-
-# Build generated_files array
-for num in "${vdisk_wr_col_numbers[@]}"; do
-  generated_files+=("col_${num}.data")
-done
-
-
-tmp_summary=$(mktemp)
-for file in "${generated_files[@]}"; do
-  col_num=$(printf '%s\n' "$file" | sed -n 's/.*col_\([0-9][0-9]*\)\.data/\1/p')
-  vmdk_name="${vmdk_by_col[$col_num]:-unknown_vmdk}"
-  awk '
-    $3 ~ /^-?[0-9]+(\.[0-9]+)?$/ {
-      sum += $3
-      if (!seen || $3 > max) { max = $3; seen = 1 }
-      n++
-    }
-    END {
-      # Sort key first. Columns with no numeric samples get -1 so they land at
-      # the bottom of a descending sort instead of impersonating the worst.
-      if (n > 0) {
-        avg = sum/n
-        printf "%.10f\t%.4f\t%.4f\t%s\t%s\t%s\n", avg, avg, max, col, vmdk, n
-      } else {
-        printf "-1\tn/a\tn/a\t%s\t%s\t0\n", col, vmdk
+  tmp_summary=$(mktemp)
+  for col_num in "${col_numbers[@]}"; do
+    vmdk_name="${vmdk_by_col[$col_num]:-unknown_vmdk}"
+    awk '
+      $3 ~ /^-?[0-9]+(\.[0-9]+)?$/ {
+        sum += $3
+        if (!seen || $3 > max) { max = $3; seen = 1 }
+        n++
       }
-    }
-  ' vmdk="$vmdk_name" col="$col_num" "$file" >> "$tmp_summary"
-done
-
-print_latency_table "SCSI WRITE LATENCY  (Average MilliSec/Write)" "$tmp_summary"
-rm -f "$tmp_summary"
-
-# ============================================================
-# SCSI READ LATENCY TABLE (Average MilliSec/Read)
-# ============================================================
-if [ -f "vdisk_avg_ms_read__all_col_ids" ]; then
-    rm vdisk_avg_ms_read__all_col_ids
-fi
-
-python3 "$SCRIPT_DIR/find_column_idx.py" "$input_file"| grep -E "\Average MilliSec/Read" > vdisk_avg_ms_read__all_col_ids
-
-vdisk_avg_rd_ms_index_count=$(cat vdisk_avg_ms_read__all_col_ids | wc -l | tr -d ' ')
-printf "\n\nFound %s read latency columns.\n" "$vdisk_avg_rd_ms_index_count"
-
-# Create arrays and mapping from column index to vmdk for READ
-declare -A vmdk_by_col_read
-vdisk_rd_col_numbers=()
-while IFS= read -r line; do
-  col_idx=$(printf '%s\n' "$line" | awk '{print $2}')
-  vmdk_name=$(printf '%s\n' "$line" | sed -n 's/.*Virtual Disk(\(.*\))\\Average.*/\1/p')
-  if [ -n "$col_idx" ]; then
-    vdisk_rd_col_numbers+=("$col_idx")
-    if [ -n "$vmdk_name" ]; then
-      vmdk_by_col_read["$col_idx"]="$vmdk_name"
-    else
-      vmdk_by_col_read["$col_idx"]="unknown_vmdk"
-    fi
-  fi
-done < vdisk_avg_ms_read__all_col_ids
-
-total_data_point_files_read=${#vdisk_rd_col_numbers[@]}
-generated_files_read=()
-
-# Extract all READ columns in a single pass (efficient for large files)
-printf "Extracting %s read columns in a single pass...\n" "$total_data_point_files_read"
-python3 "$SCRIPT_DIR/extract_columns_batch.py" --quiet "$input_file" "${vdisk_rd_col_numbers[@]}"
-
-# Build generated_files_read array
-for num in "${vdisk_rd_col_numbers[@]}"; do
-  generated_files_read+=("col_${num}.data")
-done
-
-tmp_summary_read=$(mktemp)
-for file in "${generated_files_read[@]}"; do
-  col_num=$(printf '%s\n' "$file" | sed -n 's/.*col_\([0-9][0-9]*\)\.data/\1/p')
-  vmdk_name="${vmdk_by_col_read[$col_num]:-unknown_vmdk}"
-  awk '
-    $3 ~ /^-?[0-9]+(\.[0-9]+)?$/ {
-      sum += $3
-      if (!seen || $3 > max) { max = $3; seen = 1 }
-      n++
-    }
-    END {
-      if (n > 0) {
-        avg = sum/n
-        printf "%.10f\t%.4f\t%.4f\t%s\t%s\t%s\n", avg, avg, max, col, vmdk, n
-      } else {
-        printf "-1\tn/a\tn/a\t%s\t%s\t0\n", col, vmdk
+      END {
+        # Sort key first. Columns with no numeric samples get -1 so they land at
+        # the bottom of a descending sort instead of impersonating the worst.
+        if (n > 0) {
+          avg = sum/n
+          printf "%.10f\t%.4f\t%.4f\t%s\t%s\t%s\n", avg, avg, max, col, vmdk, n
+        } else {
+          printf "-1\tn/a\tn/a\t%s\t%s\t0\n", col, vmdk
+        }
       }
-    }
-  ' vmdk="$vmdk_name" col="$col_num" "$file" >> "$tmp_summary_read"
-done
+    ' vmdk="$vmdk_name" col="$col_num" "col_${col_num}.data" >> "$tmp_summary"
+  done
 
-print_latency_table "SCSI READ LATENCY  (Average MilliSec/Read)" "$tmp_summary_read"
-rm -f "$tmp_summary_read"
+  print_counter_table "$counter" "$tmp_summary"
+  rm -f "$tmp_summary"
+done < <(cut -f1 "$categories_file" | sort -u)
+
+rm -f "$categories_file"
