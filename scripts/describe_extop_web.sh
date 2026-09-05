@@ -7,29 +7,32 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # Render one discovered counter as a fixed-width table, worst first.
 #
 # Input is the tab-separated scratch file built by the caller:
-#   sort_key <TAB> avg <TAB> max <TAB> column <TAB> name <TAB> sample_count
+#   sort_key <TAB> min <TAB> avg <TAB> max <TAB> column <TAB> name <TAB> samples
 #
 # Rows are sorted by average descending, so the disk that needs attention is
-# the first thing read rather than the last. A capture mixes VM-level rollups
-# with the per-VMDK counters underneath them, and the two are easy to confuse
-# when the numbers repeat, so SCOPE labels which is which. Units are left to
-# the counter name in the title: the counters discovered in a capture are not
-# all milliseconds.
+# the first thing read rather than the last. MIN sits beside AVG and MAX
+# because an average alone hides the shape of a series: a disk that idles and
+# then spikes and one that is steadily mediocre average the same. A capture
+# mixes VM-level rollups with the per-VMDK counters underneath them, and the
+# two are easy to confuse when the numbers repeat, so SCOPE labels which is
+# which. Units are left to the counter name in the title: the counters
+# discovered in a capture are not all milliseconds.
 print_counter_table() {
   local title="$1"
   local data_file="$2"
-  local rule="-------------------------------------------------------------------"
+  local rule="--------------------------------------------------------------------------------"
 
   echo
   echo -e "\033[1m${title}\033[0m"
   echo "$rule"
-  printf "%-5s  %-30s  %9s  %9s  %8s\n" "SCOPE" "VMDK" "AVG" "MAX" "COLUMN"
+  printf "%-5s  %-30s  %9s  %9s  %9s  %8s\n" \
+    "SCOPE" "VMDK" "MIN" "AVG" "MAX" "COLUMN"
   echo "$rule"
 
   local rows=0
   local idle=0
   local nodata=0
-  while IFS=$'\t' read -r sort_key avg max col name samples; do
+  while IFS=$'\t' read -r sort_key min avg max col name samples; do
     [ -z "$name" ] && continue
     rows=$((rows + 1))
 
@@ -39,7 +42,8 @@ print_counter_table() {
       *:scsi*) scope="vmdk" ;;
     esac
 
-    printf "%-5s  %-30s  %9s  %9s  %8s\n" "$scope" "$name" "$avg" "$max" "$col"
+    printf "%-5s  %-30s  %9s  %9s  %9s  %8s\n" \
+      "$scope" "$name" "$min" "$avg" "$max" "$col"
 
     if [ "$avg" = "n/a" ]; then
       nodata=$((nodata + 1))
@@ -203,32 +207,25 @@ while IFS= read -r counter; do
     vmdk_by_col["$col_idx"]="${vmdk_name:-unknown_vmdk}"
   done < <(awk -F'\t' -v counter="$counter" '$1 == counter { print $2 "\t" $3 }' "$categories_file")
 
-  # Extract all columns of this counter in a single pass (efficient for
-  # large files).
+  # Extract all columns of this counter in a single pass (efficient for large
+  # files) and summarise them from the same pass. The statistics come from
+  # series_stats() in esxtop_visualizer.extractor, so the report and the Python
+  # API agree on what a missing sample means: skipped, never read as zero.
   printf "\nExtracting %s %s columns in a single pass...\n" "${#col_numbers[@]}" "$counter"
-  python3 "$SCRIPT_DIR/extract_columns_batch.py" --quiet "$input_file" "${col_numbers[@]}"
+  tmp_stats=$(mktemp)
+  python3 "$SCRIPT_DIR/extract_columns_batch.py" --quiet --stats "$tmp_stats" \
+    "$input_file" "${col_numbers[@]}"
 
+  # Attach the instance name, which only this loop knows, to each column's row.
   tmp_summary=$(mktemp)
-  for col_num in "${col_numbers[@]}"; do
+  while IFS=$'\t' read -r col_num sort_key min avg max samples; do
+    [ -z "$col_num" ] && continue
     vmdk_name="${vmdk_by_col[$col_num]:-unknown_vmdk}"
-    awk '
-      $3 ~ /^-?[0-9]+(\.[0-9]+)?$/ {
-        sum += $3
-        if (!seen || $3 > max) { max = $3; seen = 1 }
-        n++
-      }
-      END {
-        # Sort key first. Columns with no numeric samples get -1 so they land at
-        # the bottom of a descending sort instead of impersonating the worst.
-        if (n > 0) {
-          avg = sum/n
-          printf "%.10f\t%.4f\t%.4f\t%s\t%s\t%s\n", avg, avg, max, col, vmdk, n
-        } else {
-          printf "-1\tn/a\tn/a\t%s\t%s\t0\n", col, vmdk
-        }
-      }
-    ' vmdk="$vmdk_name" col="$col_num" "col_${col_num}.data" >> "$tmp_summary"
-  done
+    printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\n" \
+      "$sort_key" "$min" "$avg" "$max" "$col_num" "$vmdk_name" "$samples" \
+      >> "$tmp_summary"
+  done < "$tmp_stats"
+  rm -f "$tmp_stats"
 
   print_counter_table "$counter" "$tmp_summary"
   rm -f "$tmp_summary"

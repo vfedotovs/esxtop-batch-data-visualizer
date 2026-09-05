@@ -34,10 +34,14 @@ from .parser import (
 # Public API exports from extractor module
 from .extractor import (
     TimeSeriesData,
+    SeriesStats,
+    numeric_samples,
+    series_stats,
     extract_column_data,
     save_time_series,
     extract_and_save,
     extract_multiple_columns,
+    save_extracted_columns,
     extract_and_save_batch,
 )
 
@@ -62,10 +66,14 @@ __all__ = [
     "print_summary",
     # Extractor
     "TimeSeriesData",
+    "SeriesStats",
+    "numeric_samples",
+    "series_stats",
     "extract_column_data",
     "save_time_series",
     "extract_and_save",
     "extract_multiple_columns",
+    "save_extracted_columns",
     "extract_and_save_batch",
     # Visualizer
     "load_data_file",
