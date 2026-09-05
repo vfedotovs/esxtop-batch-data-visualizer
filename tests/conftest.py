@@ -2,8 +2,9 @@
 Shared fixtures and helpers for the esxtop_visualizer test suite.
 
 Most of what lives here supports the VM VMDK stat-category discovery tests
-(``tests/test_parser.py``) and the container report tests
-(``tests/test_describe_extop_web.py``).
+(``tests/test_parser.py``), the container report tests
+(``tests/test_describe_extop_web.py``) and the ``--list-categories`` CLI tests
+(``tests/test_list_categories.py``).
 
 Discovery contract exercised by those tests
 -------------------------------------------
@@ -30,6 +31,7 @@ below read either, and tolerate the field-name variations listed in
 """
 
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -42,6 +44,11 @@ if str(SRC_PATH) not in sys.path:
 
 REPO_ROOT = Path(__file__).parent.parent
 DESCRIBE_SCRIPT = REPO_ROOT / "scripts" / "describe_extop_web.sh"
+
+# Primary entry point named by the --list-categories issue; the sibling script
+# is the documented alternative placement for the same flag.
+SUMMARIZE_SCRIPT = REPO_ROOT / "scripts" / "summarize_columns.py"
+SIBLING_SCRIPT = REPO_ROOT / "scripts" / "list_categories.py"
 
 HOST = "esx01.example.com"
 
@@ -463,3 +470,87 @@ def write_stats_csv(path, series=None, noise=None, host=HOST):
 def stats_csv(tmp_path):
     """(csv path, STATS_SERIES) for a capture with known per-column values."""
     return write_stats_csv(tmp_path / "stats.csv"), STATS_SERIES
+
+
+# --------------------------------------------------------------------------
+# --list-categories CLI helpers
+# --------------------------------------------------------------------------
+#
+# These build fixtures from explicit ``(category, counter)`` pairs -- rather
+# than the ``\\category\\counter`` tails ``write_csv`` takes -- because the
+# listing tests assert on an exact, ordered line set and need to control the
+# header column for column exactly.
+
+def make_header_column(category: str, counter: str, host: str = HOST) -> str:
+    r"""Build a PDH-CSV header cell: ``\\host\category\counter``."""
+    return f"\\\\{host}\\{category}\\{counter}"
+
+
+def write_pdh_csv(path: Path, columns, rows=None) -> Path:
+    """Write a minimal PDH-CSV file.
+
+    Args:
+        path: Destination file.
+        columns: Iterable of ``(category, counter)`` pairs, in the exact order
+            they should appear in the header (after the timestamp column).
+        rows: Optional list of value rows; one dummy row is written by default.
+
+    Returns:
+        The path written, for convenience.
+    """
+    header = ['"(PDH-CSV 4.0) (UTC)(0)"']
+    for category, counter in columns:
+        header.append('"' + make_header_column(category, counter) + '"')
+
+    if rows is None:
+        rows = [["08/30/2026 10:00:00"] + [str(1.0 + i) for i in range(len(columns))]]
+
+    lines = [",".join(header)]
+    for row in rows:
+        lines.append(",".join('"' + str(value) + '"' for value in row))
+
+    path = Path(path)
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return path
+
+
+def run_list_categories(csv_path, *extra_args):
+    """Run the CLI with ``--list-categories`` against ``csv_path``.
+
+    Prefers ``scripts/summarize_columns.py --list-categories``. If that script
+    does not know the flag yet and the sibling ``scripts/list_categories.py``
+    exists, the sibling is used instead (the issue allows either placement).
+
+    Returns:
+        The ``subprocess.CompletedProcess`` (text mode).
+    """
+    def _run(script, args):
+        return subprocess.run(
+            [sys.executable, str(script), str(csv_path), *args],
+            capture_output=True,
+            text=True,
+            cwd=str(REPO_ROOT),
+        )
+
+    result = _run(SUMMARIZE_SCRIPT, ["--list-categories", *extra_args])
+
+    flag_unknown = result.returncode == 2 and "unrecognized arguments" in result.stderr
+    if flag_unknown and SIBLING_SCRIPT.exists():
+        result = _run(SIBLING_SCRIPT, list(extra_args))
+
+    return result
+
+
+@pytest.fixture
+def pdh_csv(tmp_path):
+    """Factory fixture: ``pdh_csv(name, columns)`` -> path to a PDH-CSV file."""
+    def _make(name, columns, rows=None):
+        return write_pdh_csv(tmp_path / name, columns, rows=rows)
+
+    return _make
+
+
+@pytest.fixture
+def list_categories():
+    """Expose :func:`run_list_categories` as a fixture."""
+    return run_list_categories

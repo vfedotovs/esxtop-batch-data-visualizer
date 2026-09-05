@@ -8,7 +8,7 @@ headers from VMware ESXi esxtop batch mode exports.
 import csv
 import re
 from dataclasses import dataclass
-from typing import List, Dict, Tuple
+from typing import Iterable, List, Dict, Tuple
 from collections import Counter
 
 
@@ -248,6 +248,47 @@ def print_column_info(column: ColumnMetadata, verbose: bool = False) -> None:
         print()
     else:
         print(f"Column {column.index} RAW {column.original}' ")
+
+
+# Field separator for the machine-readable category listing. A tab cannot occur
+# inside an esxtop VM name, VMDK instance or counter name, so every line splits
+# into exactly three fields -- unlike a space or a comma, both of which appear
+# inside counter names such as "Average MilliSec/Write".
+CATEGORY_DELIMITER = "\t"
+
+
+def format_vmdk_categories(categories: Iterable[VmdkCategory]) -> List[str]:
+    """Render discovered categories as machine-readable listing lines.
+
+    Each line is ``vm<TAB>vmdk<TAB>counter``, so ``cut -f1`` selects VMs and
+    ``cut -f3`` selects counter names. Counter names are printed in full: this
+    listing is meant to be piped, not read in a terminal, so the truncation and
+    decoration :func:`print_summary` applies would corrupt it.
+
+    Lines are sorted by VM, then VMDK, then counter, which groups every disk of
+    a VM together and makes the output byte-identical across runs regardless of
+    the order the columns appear in the header.
+
+    A VM-level rollup category -- ``Virtual Disk(vm1)``, with no disk part --
+    has an empty VMDK field, and so sorts to the head of its VM's block.
+
+    Args:
+        categories: VmdkCategory objects, as returned by
+            :func:`discover_vmdk_categories`
+
+    Returns:
+        List of formatted lines; empty when there are no categories.
+
+    Example:
+        >>> format_vmdk_categories(discover_vmdk_categories("esxtop_batch.csv"))
+        ['vm1\tscsi0:0\tAverage MilliSec/Write']
+    """
+    return [
+        CATEGORY_DELIMITER.join((category.vm, category.vmdk, category.counter))
+        for category in sorted(
+            categories, key=lambda c: (c.vm, c.vmdk, c.counter)
+        )
+    ]
 
 
 def summarize_columns(
