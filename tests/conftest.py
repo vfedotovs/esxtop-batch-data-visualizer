@@ -258,3 +258,208 @@ def run_describe(tmp_path):
         )
 
     return _run
+
+
+# --------------------------------------------------------------------------
+# Min / max / average statistics helpers
+# --------------------------------------------------------------------------
+#
+# Contract exercised by the statistics tests
+# ------------------------------------------
+# ``esxtop_visualizer.extractor`` exposes a reusable helper that computes the
+# minimum, maximum and average of a ``TimeSeriesData`` series -- canonically
+# ``series_stats(series)``. ``None`` samples (non-numeric or missing cells, as
+# produced by ``extract_multiple_columns``) are excluded from all three
+# statistics rather than counted as zero.
+#
+# The helper may be a module-level function or a method on ``TimeSeriesData``,
+# and may return a mapping, an object with ``min``/``max``/``avg`` style
+# attributes, or a ``(min, max, avg)`` tuple; ``stats_triple`` reads any of
+# those, tolerating the field-name variations in ``_STAT_ALIASES``.
+
+# Candidate names for a module-level stats helper, most canonical first.
+STATS_FUNCTION_NAMES = (
+    "series_stats",
+    "compute_series_stats",
+    "calculate_series_stats",
+    "series_statistics",
+    "compute_stats",
+    "calculate_stats",
+    "compute_statistics",
+    "calculate_statistics",
+    "summarize_series",
+    "summarise_series",
+    "summarize_time_series",
+    "time_series_stats",
+    "min_max_avg",
+    "min_max_average",
+    "compute_min_max_avg",
+    "compute_min_max_average",
+)
+
+# Candidate names for the same helper exposed as a TimeSeriesData method.
+STATS_METHOD_NAMES = (
+    "stats",
+    "statistics",
+    "series_stats",
+    "compute_stats",
+    "summary",
+    "summarize",
+    "min_max_avg",
+)
+
+_STAT_ALIASES = {
+    "min": ("min", "minimum", "min_value", "minimum_value", "min_val"),
+    "max": ("max", "maximum", "max_value", "maximum_value", "max_val"),
+    "avg": ("avg", "average", "mean", "avg_value", "average_value", "avg_val"),
+}
+
+
+def make_series(values):
+    """Build a TimeSeriesData from ``values`` (floats and/or ``None``)."""
+    from esxtop_visualizer.extractor import TimeSeriesData
+
+    series = TimeSeriesData()
+    for i, value in enumerate(values):
+        series.add_point("10/03/2025 12:%02d:00" % i, value)
+    return series
+
+
+def get_stats_callable():
+    """Return ``(callable, label)`` for the min/max/average helper.
+
+    Fails the calling test (rather than erroring at import time) while no such
+    helper exists.
+    """
+    from esxtop_visualizer import extractor
+
+    for name in STATS_FUNCTION_NAMES:
+        func = getattr(extractor, name, None)
+        if callable(func):
+            return func, "esxtop_visualizer.extractor.%s()" % name
+
+    for name in STATS_METHOD_NAMES:
+        method = getattr(extractor.TimeSeriesData, name, None)
+        if callable(method):
+            return (lambda series, _m=name: getattr(series, _m)()), \
+                "TimeSeriesData.%s()" % name
+
+    pytest.fail(
+        "esxtop_visualizer.extractor has no reusable min/max/average helper; "
+        "expected a function named one of: %s (or a TimeSeriesData method "
+        "named one of: %s)"
+        % (", ".join(STATS_FUNCTION_NAMES), ", ".join(STATS_METHOD_NAMES))
+    )
+
+
+def _stat_field(result, field):
+    """Read ``field`` from a stats result (mapping, object or triple)."""
+    aliases = _STAT_ALIASES[field]
+
+    if hasattr(result, "keys"):
+        for alias in aliases:
+            if alias in result:
+                return result[alias]
+    else:
+        for alias in aliases:
+            value = getattr(result, alias, None)
+            if value is not None and not callable(value):
+                return value
+        # Plain (min, max, avg) sequence.
+        if isinstance(result, (tuple, list)) and len(result) == 3:
+            return result[("min", "max", "avg").index(field)]
+
+    pytest.fail(
+        "stats result %r carries no %r value (tried %s, and a (min, max, avg) "
+        "sequence)" % (result, field, ", ".join(aliases))
+    )
+
+
+def stats_triple(values):
+    """Run the stats helper over ``values`` and return ``(min, max, avg)``.
+
+    Accepts a helper taking a ``TimeSeriesData``; falls back to one taking a
+    plain sequence of samples.
+    """
+    func, label = get_stats_callable()
+    series = make_series(values)
+
+    try:
+        result = func(series)
+    except Exception as series_error:  # noqa: BLE001 - reported via pytest.fail
+        try:
+            result = func(list(values))
+        except Exception:  # noqa: BLE001
+            pytest.fail(
+                "%s raised %r on a TimeSeriesData of %r"
+                % (label, series_error, list(values))
+            )
+
+    return tuple(float(_stat_field(result, f)) for f in ("min", "max", "avg"))
+
+
+def expected_stats(samples):
+    """Reference (min, max, avg) over the numeric entries of ``samples``."""
+    numeric = [float(v) for v in samples if isinstance(v, (int, float))]
+    assert numeric, "fixture series %r has no numeric samples" % (samples,)
+    return min(numeric), max(numeric), sum(numeric) / len(numeric)
+
+
+# --------------------------------------------------------------------------
+# A capture with hand-picked values, for checking reported statistics
+# --------------------------------------------------------------------------
+#
+# (vm, vmdk, counter, samples). Every series has a distinct min, max and
+# average, so a row that prints only two of the three cannot pass by accident.
+# Empty and non-numeric cells stand in for the ``None`` samples
+# ``extract_multiple_columns`` yields.
+STATS_SERIES = [
+    ("vm1", "", "Average MilliSec/Write", [1.0, 2.0, 3.0, 10.0]),
+    ("vm1", "scsi0:0", "Average MilliSec/Write", [5.0, 1.5, 9.5, 3.0]),
+    ("vm1", "scsi0:1", "Average MilliSec/Write", ["", 4.0, "-", 6.0]),
+    ("vm2", "scsi0:0", "Average MilliSec/Write", [2.25, 8.75, 0.5, 4.5]),
+    ("vm1", "scsi0:0", "Commands/sec", [10.0, 30.0, 20.0, 60.0]),
+    ("vm2", "scsi0:0", "Commands/sec", [0.5, 2.5, 1.5, 3.5]),
+]
+
+# Same counter name on a physical disk: it must not be reported as a VMDK, and
+# its values must not leak into any VMDK row.
+STATS_NOISE_SERIES = [
+    ("Physical Disk(naa.60000000000000000)\\Average MilliSec/Write",
+     [99.0, 99.0, 99.0, 99.0]),
+    ("Memory\\Machine MBytes", [4096.0, 4096.0, 4096.0, 4096.0]),
+]
+
+
+def stats_instance(vm, vmdk):
+    """Header instance string: "vm1:scsi0:0", or "vm1" for a VM rollup."""
+    return "%s:%s" % (vm, vmdk) if vmdk else vm
+
+
+def write_stats_csv(path, series=None, noise=None, host=HOST):
+    """Write a capture whose columns carry the values in ``STATS_SERIES``."""
+    series = STATS_SERIES if series is None else series
+    noise = STATS_NOISE_SERIES if noise is None else noise
+
+    tails = ["Virtual Disk(%s)\\%s" % (stats_instance(vm, vmdk), counter)
+             for vm, vmdk, counter, _samples in series]
+    tails += [tail for tail, _samples in noise]
+    columns = [samples for _vm, _vmdk, _counter, samples in series]
+    columns += [samples for _tail, samples in noise]
+
+    row_count = len(columns[0])
+    lines = [make_header(tails, host=host)]
+    for r in range(row_count):
+        cells = ['"10/03/2025 12:%02d:00"' % r]
+        cells += ['"%s"' % column[r] for column in columns]
+        lines.append(",".join(cells))
+
+    path = Path(path)
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return path
+
+
+@pytest.fixture
+def stats_csv(tmp_path):
+    """(csv path, STATS_SERIES) for a capture with known per-column values."""
+    return write_stats_csv(tmp_path / "stats.csv"), STATS_SERIES

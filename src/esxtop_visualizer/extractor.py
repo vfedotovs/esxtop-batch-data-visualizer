@@ -8,7 +8,9 @@ in PDH-CSV format esxtop batch exports.
 import csv
 import re
 from collections import OrderedDict
-from typing import Dict, Optional, Iterator, Tuple, List
+from typing import (
+    Any, Dict, Iterable, Iterator, List, NamedTuple, Optional, Tuple,
+)
 
 
 class TimeSeriesData:
@@ -42,6 +44,59 @@ class TimeSeriesData:
 
     def __repr__(self) -> str:
         return f"TimeSeriesData({len(self)} points)"
+
+
+class SeriesStats(NamedTuple):
+    """Minimum, maximum and mean of the numeric samples in a series."""
+
+    minimum: float
+    maximum: float
+    average: float
+
+
+def numeric_samples(series: Iterable[Any]) -> List[float]:
+    """Return the numeric samples of ``series``, in order.
+
+    Accepts a :class:`TimeSeriesData` (which iterates as ``(timestamp, value)``
+    pairs), or any iterable of plain values. Missing samples -- the ``None``
+    that :func:`extract_multiple_columns` yields for a blank or non-numeric
+    cell -- are dropped rather than read as zero, as are NaNs and booleans.
+    """
+    values: List[float] = []
+
+    for item in series:
+        if isinstance(item, tuple) and len(item) == 2:
+            item = item[1]
+        # bool is an int subclass; a True in a sample column is not a 1.0.
+        if isinstance(item, bool) or not isinstance(item, (int, float)):
+            continue
+        value = float(item)
+        if value != value:  # NaN
+            continue
+        values.append(value)
+
+    return values
+
+
+def series_stats(series: Iterable[Any]) -> Optional[SeriesStats]:
+    """Compute min, max and average over the numeric samples of ``series``.
+
+    Missing samples are excluded from all three statistics *and* from the
+    sample count they are averaged over, so ``[None, 4.0, None, 6.0]`` reports
+    min 4.0, max 6.0 and average 5.0 -- not 2.5, and not 0.0.
+
+    Returns ``None`` for a series with no numeric samples at all, which callers
+    report as "no data" rather than as a zero reading.
+
+    Example:
+        >>> series_stats([None, 4.0, None, 6.0])
+        SeriesStats(minimum=4.0, maximum=6.0, average=5.0)
+    """
+    values = numeric_samples(series)
+    if not values:
+        return None
+
+    return SeriesStats(min(values), max(values), sum(values) / len(values))
 
 
 # Timestamp pattern: MM/DD/YYYY HH:MM:SS (quoted in CSV)
@@ -243,6 +298,40 @@ def extract_multiple_columns(
         raise ValueError(f"Error extracting data: {e}")
 
 
+def save_extracted_columns(
+    results: Dict[int, TimeSeriesData],
+    output_dir: str = ".",
+    column_titles: Optional[Dict[int, str]] = None
+) -> List[str]:
+    """Save already-extracted columns to ``col_{index}.data`` files.
+
+    Split out of :func:`extract_and_save_batch` so a caller that also needs the
+    samples -- to summarise them, say -- can read the CSV once and then save.
+
+    Args:
+        results: Mapping of column index to TimeSeriesData, as returned by
+            :func:`extract_multiple_columns`
+        output_dir: Directory to save output files (default: current directory)
+        column_titles: Optional dict mapping column index to human-friendly title
+
+    Returns:
+        List of created output file paths
+    """
+    import os
+
+    output_files = []
+    for col_idx, time_series in results.items():
+        output_file = os.path.join(output_dir, f"col_{col_idx}.data")
+        save_time_series(time_series, output_file)
+        output_files.append(output_file)
+
+        # Save metadata if title provided
+        if column_titles and col_idx in column_titles:
+            save_metadata(column_titles[col_idx], output_file)
+
+    return output_files
+
+
 def extract_and_save_batch(
     filename: str,
     column_indices: List[int],
@@ -274,20 +363,5 @@ def extract_and_save_batch(
         >>> print(f"Created {len(files)} files: {files}")
         Created 2 files: ['col_100.data', 'col_200.data']
     """
-    import os
-
-    # Extract all columns in one pass
     results = extract_multiple_columns(filename, column_indices)
-
-    # Save each column to a file
-    output_files = []
-    for col_idx, time_series in results.items():
-        output_file = os.path.join(output_dir, f"col_{col_idx}.data")
-        save_time_series(time_series, output_file)
-        output_files.append(output_file)
-
-        # Save metadata if title provided
-        if column_titles and col_idx in column_titles:
-            save_metadata(column_titles[col_idx], output_file)
-
-    return output_files
+    return save_extracted_columns(results, output_dir, column_titles)
