@@ -22,7 +22,9 @@ __author__ = "esxtop-visualizer contributors"
 # Public API exports from parser module
 from .parser import (
     ColumnMetadata,
+    VmdkCategory,
     parse_csv_header,
+    discover_vmdk_categories,
     find_columns_by_pattern,
     print_column_info,
     summarize_columns,
@@ -32,10 +34,14 @@ from .parser import (
 # Public API exports from extractor module
 from .extractor import (
     TimeSeriesData,
+    SeriesStats,
+    numeric_samples,
+    series_stats,
     extract_column_data,
     save_time_series,
     extract_and_save,
     extract_multiple_columns,
+    save_extracted_columns,
     extract_and_save_batch,
 )
 
@@ -51,17 +57,23 @@ from .visualizer import (
 __all__ = [
     # Parser
     "ColumnMetadata",
+    "VmdkCategory",
     "parse_csv_header",
+    "discover_vmdk_categories",
     "find_columns_by_pattern",
     "print_column_info",
     "summarize_columns",
     "print_summary",
     # Extractor
     "TimeSeriesData",
+    "SeriesStats",
+    "numeric_samples",
+    "series_stats",
     "extract_column_data",
     "save_time_series",
     "extract_and_save",
     "extract_multiple_columns",
+    "save_extracted_columns",
     "extract_and_save_batch",
     # Visualizer
     "load_data_file",
