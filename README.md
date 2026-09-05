@@ -134,7 +134,23 @@ Override `IMAGE=` to run a published tag instead of a locally built one.
    ./scripts/describe_extop.sh esxtop_batch_data.csv
    ```
 
-3. **Find column index** of interest
+3. **List what the capture contains**, in a form other tools can consume
+   ```sh
+   python3 scripts/summarize_columns.py esxtop_batch_data.csv --list-categories
+   ```
+   One line per VM VMDK category, as `vm<TAB>vmdk<TAB>counter`, sorted by VM,
+   then VMDK, then counter:
+   ```
+   EXAMPLE_VM	scsi3:0	Average MilliSec/Read
+   EXAMPLE_VM	scsi3:0	Average MilliSec/Write
+   ```
+   Progress messages go to stderr, so `--list-categories > categories.txt`
+   yields a file of nothing but category lines. Fields are tab separated, so
+   `cut -f1 | sort -u` lists the VMs and `cut -f3 | sort -u` lists the counters
+   available to chart. A VM-level rollup -- `Virtual Disk(vm1)`, with no disk
+   part -- has an empty VMDK field and sorts to the head of its VM's block.
+
+4. **Find column index** of interest
    ```sh
    python3 scripts/find_column_idx.py esxtop_batch_data.csv | grep -E -B 4 "scsi.*Write"
    ```
@@ -143,13 +159,13 @@ Override `IMAGE=` to run a published tag instead of a locally built one.
    Column 51446 RAW \\esx01.example.com\Virtual Disk(EXAMPLE_VM_NAME:scsi3:0)\Average MilliSec/Write
    ```
 
-4. **Extract time series data** from the chosen column
+5. **Extract time series data** from the chosen column
    ```sh
    python3 scripts/extract_column.py esxtop_batch_data.csv 51446
    ```
    This generates `col_51446.data` with timestamped metric values.
 
-5. **Visualize the data**
+6. **Visualize the data**
    ```sh
    # Interactive plot
    python3 scripts/visualize_data.py col_51446.data --scale 1.0

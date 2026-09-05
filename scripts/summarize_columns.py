@@ -7,6 +7,8 @@ Usage:
     ./scripts/summarize_columns.py <csv_file> [options]
 
 Options:
+    --list-categories     Print every VM VMDK category as "vm<TAB>vmdk<TAB>counter",
+                          one per line, for piping into other tools
     --category PATTERN    Filter by category pattern (regex)
     --counter PATTERN     Filter by counter pattern (regex)
     --top N              Show top N items (default: 20)
@@ -24,6 +26,9 @@ Example:
 
     # Find write latency for Virtual Disks
     ./scripts/summarize_columns.py esxtop_batch.csv --category "Virtual Disk" --counter "Write"
+
+    # Machine-readable listing: what can I chart?
+    ./scripts/summarize_columns.py esxtop_batch.csv --list-categories | cut -f1 | sort -u
 """
 
 import argparse
@@ -34,7 +39,12 @@ from pathlib import Path
 src_path = Path(__file__).parent.parent / "src"
 sys.path.insert(0, str(src_path))
 
-from esxtop_visualizer.parser import summarize_columns, print_summary
+from esxtop_visualizer.parser import (
+    discover_vmdk_categories,
+    format_vmdk_categories,
+    print_summary,
+    summarize_columns,
+)
 
 
 def main():
@@ -67,6 +77,12 @@ Examples:
         help="Path to esxtop CSV file"
     )
     parser.add_argument(
+        "--list-categories",
+        action="store_true",
+        help="Print every VM VMDK category as 'vm<TAB>vmdk<TAB>counter', one "
+             "per line, sorted by VM then VMDK then counter"
+    )
+    parser.add_argument(
         "--category",
         help="Filter by category pattern (regex, case-insensitive)"
     )
@@ -89,6 +105,14 @@ Examples:
 
     try:
         print(f"Analyzing {args.csv_file}...", file=sys.stderr)
+
+        # Machine-readable listing: stdout carries category lines and nothing
+        # else, so `--list-categories > out.txt` yields a pipeable file. A
+        # capture with no Virtual Disk columns prints nothing and still exits 0.
+        if args.list_categories:
+            for line in format_vmdk_categories(discover_vmdk_categories(args.csv_file)):
+                print(line)
+            return
 
         # Get summary
         category_counts, counter_counts, combined_counts = summarize_columns(
