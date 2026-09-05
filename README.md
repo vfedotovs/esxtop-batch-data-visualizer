@@ -96,6 +96,28 @@ The container serves the app with gunicorn and runs as the unprivileged user
 `esxtop` (uid 10001). Analysis output is written to the `esxtop_output` volume
 under `/tmp/esxtop_output`.
 
+### Using Docker (Text Report, No Web UI)
+
+To analyse a capture that already lives on the host, without uploading it
+through the browser, use the `docker-stats` target. It builds the image if
+needed, bind-mounts the CSV **read-only** into the container, and prints the
+VM VMDK stats report on stdout:
+
+```sh
+# Analyse a capture sitting anywhere on the host
+make docker-stats CSV=/var/captures/esxtop_batch_data.csv
+
+# With no override, the default capture in the current directory is used
+make docker-stats
+```
+
+Nothing is copied into the image and the capture is never written to, so a
+multi-gigabyte CSV costs no extra disk. The target runs entirely inside the
+container — no `make venv` and no host-side matplotlib install — and fails
+before starting the container if the CSV path does not exist.
+
+Override `IMAGE=` to run a published tag instead of a locally built one.
+
 **Container configuration:**
 
 | Environment variable | Default | Purpose |
